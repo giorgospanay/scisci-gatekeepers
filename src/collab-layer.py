@@ -17,7 +17,7 @@ output_file = "coauthorship.edgelist"
 
 with open(output_file, "w") as f_out:
     chunksize = 10_000
-    for chunk in pd.read_csv("your_file.tsv", sep="\t", usecols=["authorships:author:id"], chunksize=chunksize, dtype=str):
+    for chunk in pd.read_csv(tsv_file, sep="\t", usecols=["authorships:author:id"], chunksize=chunksize, dtype=str):
         for authors_str in chunk["authorships:author:id"].fillna(""):
             authors = authors_str.split(";")
             authors = [a.strip() for a in authors if a.strip()]
