@@ -10,7 +10,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=72:00:00
 #SBATCH --mem=32G
-
+#SBATCH -A gpanayio
 
 #Load any modules that your program needs
 module load python/3.12.4
