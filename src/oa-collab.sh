@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J oa_collab
+#SBATCH -J oacollab
 #SBATCH -p general
 #SBATCH -o filename_%j.txt
 #SBATCH -e filename_%j.err
@@ -10,7 +10,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=72:00:00
 #SBATCH --mem=32G
-#SBATCH -A gpanayio@iu.edu
+#SBATCH -A r00272
 
 #Load any modules that your program needs
 module load python/3.12.4
