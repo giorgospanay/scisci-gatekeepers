@@ -2,8 +2,8 @@
 
 #SBATCH -J oacollab
 #SBATCH -p general
-#SBATCH -o filename_%j.txt
-#SBATCH -e filename_%j.err
+#SBATCH -o logs/filename_%j.txt
+#SBATCH -e logs/filename_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --nodes=1
@@ -17,4 +17,4 @@ module load python/3.12.4
 
 
 #Run your program
-srun python collab-layer.py
+srun python src/collab-layer.py
