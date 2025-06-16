@@ -4,14 +4,15 @@ import pickle
 
 
 # Workspace path
-workspace_path="/N/slate/gpanayio/openalex-pre"
+raw_workspace_path="/N/slate/gpanayio/openalex-pre"
+out_workspace_path="/N/slate/gpanayio/scisci-gatekeepers"
 
 # Globals
-raw_path=f"{workspace_path}/data"
-obj_path=f"{workspace_path}/obj"
+raw_path=f"{raw_workspace_path}/data"
+obj_path=f"{out_workspace_path}/obj"
 
 # Data path
-tsv_file = f"{workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
+tsv_file = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
 
 author_to_node = {}
 node_id_counter = 0
