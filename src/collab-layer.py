@@ -1,5 +1,4 @@
 import pandas as pd
-import networkit as nk
 import itertools
 import pickle
 
