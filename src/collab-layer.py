@@ -3,22 +3,25 @@ import itertools
 import pickle
 
 
+# Workspace path
+workspace_path="/N/slate/gpanayio/openalex-pre"
+
 # Globals
-raw_path="../data"
-obj_path="../obj"
+raw_path=f"{workspace_path}/data"
+obj_path=f"{workspace_path}/obj"
 
 # Data path
-tsv_file = "/N/slate/gpanayio/openalex-pre/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
+tsv_file = f"{workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
 
 author_to_node = {}
 node_id_counter = 0
-output_file = "coauthorship.edgelist"
+output_file = f"{out_path}/coauthorship.edgelist"
 
 with open(output_file, "w") as f_out:
     chunksize = 10_000
     for chunk in pd.read_csv(tsv_file, sep="\t", usecols=["authorships:author:id"], chunksize=chunksize, dtype=str):
         for authors_str in chunk["authorships:author:id"].fillna(""):
-            authors = authors_str.split(";")
+            authors = authors_str.split(",")
             authors = [a.strip() for a in authors if a.strip()]
             if len(authors) < 2:
                 continue
