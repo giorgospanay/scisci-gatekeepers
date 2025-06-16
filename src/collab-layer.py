@@ -15,7 +15,7 @@ tsv_file = f"{workspace_path}/works_core+basic+authorship+ids+funding+concepts+r
 
 author_to_node = {}
 node_id_counter = 0
-output_file = f"{out_path}/coauthorship.edgelist"
+output_file = f"{obj_path}/coauthorship.edgelist"
 
 with open(output_file, "w") as f_out:
     chunksize = 10_000
