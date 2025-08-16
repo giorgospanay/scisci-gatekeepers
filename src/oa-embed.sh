@@ -18,6 +18,9 @@
 module load python/gpu/3.11.5
 
 export PATH=$HOME/.local/bin:$PATH
+# Set cache to scratch directory with more space
+export TRANSFORMERS_CACHE=/N/scratch/gpanayio/hf_cache
+
 
 # Run the embedding script
 srun python src/compute-embeddings.py
