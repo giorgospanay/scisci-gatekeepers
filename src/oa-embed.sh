@@ -17,5 +17,7 @@
 #Load any modules that your program needs
 module load python/gpu/3.11.5
 
+export PATH=$HOME/.local/bin:$PATH
+
 # Run the embedding script
 srun python src/compute-embeddings.py
