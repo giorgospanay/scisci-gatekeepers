@@ -16,4 +16,4 @@
 module load python/3.12.4
 
 # Run the embedding script
-srun python src/compute-embeddings.py
+srun python src/similarity-layer.py
