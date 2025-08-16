@@ -15,7 +15,7 @@
 #SBATCH -A r00272
 
 #Load any modules that your program needs
-module load python/3.12.4
+module load python/gpu/3.11.5
 
 # Run the embedding script
 srun python src/compute-embeddings.py
