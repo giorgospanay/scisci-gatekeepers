@@ -26,20 +26,17 @@ raw_path=f"{raw_workspace_path}/data"
 obj_path=f"{out_workspace_path}/obj"
 temp_path=f"{out_scratch_path}"
 
+# Paths
+raw_workspace_path = "/N/slate/gpanayio/openalex-pre"
+out_workspace_path = "/N/slate/gpanayio/scisci-gatekeepers"
+out_scratch_path = "/N/scratch/gpanayio"
 
-# === Config ===
-metadata_path = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
 abstracts_path = f"{raw_workspace_path}/works_core+abstract.tsv"
-output_emb_path = f"{obj_path}/paper_embeddings.npy"
-output_meta_path = f"{obj_path}/paper_metadata.jsonl"
-output_dir = f"{temp_path}/embeddings"
-chunksize = 5000
+output_dir = f"{out_scratch_path}/embeddings"
+chunksize = 50000
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# === Load model + tokenizer + adapter ===
-print("Loading SPECTER2 base and adapter...")
+# === Load SPECTER2 + adapter ===
+print("Loading SPECTER2 model and adapter...")
 tokenizer = AutoTokenizer.from_pretrained("allenai/specter2_base")
 model = AutoAdapterModel.from_pretrained("allenai/specter2_base")
 model.load_adapter("allenai/specter2", source="hf", load_as="proximity", set_active=True)
@@ -56,23 +53,24 @@ def embed(abstracts):
         return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
 # === Load abstracts ===
-print("Loading abstracts...")
-df = pd.read_csv(input_path, sep="\t", usecols=["id", "abstract"], dtype=str)
+print(f"Loading abstracts from {abstracts_path}...")
+df = pd.read_csv(abstracts_path, sep="\t", usecols=["id", "abstract"], dtype=str)
 df = df.dropna(subset=["abstract"])
 print(f"Total abstracts: {len(df)}")
 
-# === Prepare output ===
+# === Create output dir ===
 os.makedirs(output_dir, exist_ok=True)
 total_chunks = (len(df) + chunksize - 1) // chunksize
 
+# === Process and embed ===
 for i in tqdm(range(total_chunks), desc="Embedding chunks"):
     out_file = os.path.join(output_dir, f"embeddings_{i:04d}.npy")
     id_file = os.path.join(output_dir, f"ids_{i:04d}.txt")
 
     if os.path.exists(out_file):
-        continue  # skip completed
+        continue  # Skip already done
 
-    chunk = df.iloc[i * chunksize: (i + 1) * chunksize]
+    chunk = df.iloc[i * chunksize:(i + 1) * chunksize]
     abstracts = chunk["abstract"].tolist()
     ids = chunk["id"].tolist()
 
@@ -83,8 +81,7 @@ for i in tqdm(range(total_chunks), desc="Embedding chunks"):
         for pid in ids:
             f.write(pid + "\n")
 
-print("Done embedding abstracts.")
-
+print("Done embedding all abstracts.")
 
 
 # # === Embedding function ===
