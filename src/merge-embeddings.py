@@ -15,7 +15,7 @@ metadata_files = sorted(glob.glob(os.path.join(chunk_dir, "metadata_*.jsonl")))
 
 assert len(embedding_files) == len(metadata_files), "Mismatch between embedding and metadata files."
 
-print(f"🧩 Found {len(embedding_files)} chunks to merge...")
+print(f"Found {len(embedding_files)} chunks to merge...")
 
 # === Merge embeddings ===
 all_embeddings = []
