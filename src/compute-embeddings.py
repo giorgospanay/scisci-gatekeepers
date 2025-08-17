@@ -46,42 +46,44 @@ model.load_adapter("allenai/specter2", source="hf", load_as="proximity", set_act
 model = model.to(device)
 model.eval()
 
-
 # === Embedding function ===
-def embed(papers):
-    texts = [p["title"] + tokenizer.sep_token + (p.get("abstract") or "") for p in papers]
-    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt",
+def embed(abstracts):
+    inputs = tokenizer(abstracts, padding=True, truncation=True, return_tensors="pt",
                        return_token_type_ids=False, max_length=512)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
         outputs = model(**inputs)
         return outputs.last_hidden_state[:, 0, :].cpu().numpy()
 
-# === Load only required columns ===
-print("Loading paper data...")
-usecols = ["id", "abstract"]
-df = pd.read_csv(input_path, sep="\t", usecols=usecols, dtype=str)
+# === Load abstracts ===
+print("Loading abstracts...")
+df = pd.read_csv(input_path, sep="\t", usecols=["id", "abstract"], dtype=str)
 df = df.dropna(subset=["abstract"])
-print(f"Total papers to embed: {len(df)}")
+print(f"Total abstracts: {len(df)}")
 
-# === Create output dir ===
+# === Prepare output ===
 os.makedirs(output_dir, exist_ok=True)
-
-# === Process in chunks ===
 total_chunks = (len(df) + chunksize - 1) // chunksize
 
 for i in tqdm(range(total_chunks), desc="Embedding chunks"):
     out_file = os.path.join(output_dir, f"embeddings_{i:04d}.npy")
+    id_file = os.path.join(output_dir, f"ids_{i:04d}.txt")
+
     if os.path.exists(out_file):
         continue  # skip completed
 
-    chunk = df.iloc[i * chunksize:(i + 1) * chunksize]
-    papers = chunk[["title", "abstract"]].to_dict(orient="records")
+    chunk = df.iloc[i * chunksize: (i + 1) * chunksize]
+    abstracts = chunk["abstract"].tolist()
+    ids = chunk["id"].tolist()
 
-    embeddings = embed(papers)
+    embeddings = embed(abstracts)
     np.save(out_file, embeddings)
 
-print("Finished embedding all papers.")
+    with open(id_file, "w") as f:
+        for pid in ids:
+            f.write(pid + "\n")
+
+print("Done embedding abstracts.")
 
 
 
