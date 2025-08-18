@@ -63,7 +63,9 @@ os.makedirs(output_dir, exist_ok=True)
 total_chunks = (len(df) + chunksize - 1) // chunksize
 
 # === Process and embed ===
+print("Loading chunks.")
 for i in tqdm(range(total_chunks), desc="Embedding chunks"):
+    print(f"Chunk #{i+1}/{total_chunks}.tsv")
     out_file = os.path.join(output_dir, f"embeddings_{i:04d}.npy")
     id_file = os.path.join(output_dir, f"ids_{i:04d}.txt")
 
