@@ -7,7 +7,7 @@
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
-#SBATCH --mem=256G
+#SBATCH --mem=450G
 #SBATCH --cpus-per-task=2
 #SBATCH --time=2-00:00:00
 #SBATCH -A r00272
