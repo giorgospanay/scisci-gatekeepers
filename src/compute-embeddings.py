@@ -33,7 +33,7 @@ out_scratch_path = "/N/scratch/gpanayio"
 
 abstracts_path = f"{raw_workspace_path}/works_core+abstract.tsv"
 output_dir = f"{out_scratch_path}/embeddings"
-chunksize = 5000
+chunksize = 750
 
 # === Load SPECTER2 + adapter ===
 print("Loading SPECTER2 model and adapter...")
@@ -82,6 +82,9 @@ for i in tqdm(range(total_chunks), desc="Embedding chunks"):
     with open(id_file, "w") as f:
         for pid in ids:
             f.write(pid + "\n")
+
+    # refresh cache
+    torch.cuda.empty_cache()
 
 print("Done embedding all abstracts.")
 
