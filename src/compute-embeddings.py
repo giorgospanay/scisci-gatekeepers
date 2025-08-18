@@ -33,7 +33,7 @@ out_scratch_path = "/N/scratch/gpanayio"
 
 abstracts_path = f"{raw_workspace_path}/works_core+abstract.tsv"
 output_dir = f"{out_scratch_path}/embeddings"
-chunksize = 50000
+chunksize = 5000
 
 # === Load SPECTER2 + adapter ===
 print("Loading SPECTER2 model and adapter...")
