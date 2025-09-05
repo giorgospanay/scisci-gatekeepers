@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #SBATCH -e logs/oamerge_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
