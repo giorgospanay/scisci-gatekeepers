@@ -1,61 +1,68 @@
 import numpy as np
-import json
-from sklearn.metrics.pairwise import cosine_similarity
+import pandas as pd
 from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
 import itertools
 from collections import defaultdict
 
-# Workspace path
-raw_workspace_path="/N/slate/gpanayio/openalex-pre"
-out_workspace_path="/N/slate/gpanayio/scisci-gatekeepers"
+# === Paths ===
+obj_path = "/N/slate/gpanayio/scisci-gatekeepers/obj"
+raw_path = "/N/slate/gpanayio/openalex-pre/data"
 
-# Globals
-raw_path=f"{raw_workspace_path}/data"
-obj_path=f"{out_workspace_path}/obj"
+embedding_path = f"{obj_path}/merged_embeddings.npy"
+id_path = f"{obj_path}/merged_ids.txt"
+metadata_path = f"{raw_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
 
-# Data path
-tsv_file = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
+output_path = f"{obj_path}/author_similarity_layer.csv"
 
-
-# === Config ===
-embedding_path = f"{obj_path}/paper_embeddings.npy"
-metadata_path = f"{obj_path}/paper_metadata.jsonl"
-output_edge_path = f"{obj_path}/author_similarity.edgelist"
-
-
-print("Loading embeddings...")
+# === Load embeddings + paper IDs ===
+print("Loading embeddings and paper IDs...")
 embeddings = np.load(embedding_path)
-paper_authors = []
+with open(id_path) as f:
+    paper_ids = [line.strip() for line in f]
 
-print("Loading metadata...")
-with open(metadata_path) as f:
-    for line in f:
-        paper_authors.append(json.loads(line)["authors"])
+assert len(paper_ids) == embeddings.shape[0]
 
-assert len(embeddings) == len(paper_authors)
+# === Build paper_id → index map ===
+paper_index = {pid: i for i, pid in enumerate(paper_ids)}
 
-print("Computing cosine similarities...")
-similarities = cosine_similarity(embeddings)
+# === Load author data from metadata ===
+print("Loading author–paper mapping...")
+df = pd.read_csv(metadata_path, sep="\t", usecols=["id", "authorships:author:id"], dtype=str)
+df = df.dropna(subset=["authorships:author:id"])
+df = df[df["id"].isin(paper_index)]
 
-# Build author-author similarity weights
-author_pair_weights = defaultdict(list)
+# === Build author → paper index list ===
+author_papers = defaultdict(list)
 
-print("Aggregating author pair similarities...")
-for i in tqdm(range(len(embeddings))):
-    authors_i = set(paper_authors[i])
-    for j in range(i + 1, len(embeddings)):
-        authors_j = set(paper_authors[j])
-        sim = similarities[i, j]
-        for a1, a2 in itertools.product(authors_i, authors_j):
-            if a1 == a2:
-                continue
-            key = tuple(sorted((a1, a2)))
-            author_pair_weights[key].append(sim)
+for _, row in df.iterrows():
+    paper_id = row["id"]
+    authors = [a.strip() for a in row["authorships:author:id"].split(",") if a.strip()]
+    for author in authors:
+        author_papers[author].append(paper_index[paper_id])
 
-print("Saving weighted edgelist...")
-with open(output_edge_path, "w") as f_out:
-    for (a1, a2), sim_list in author_pair_weights.items():
-        avg_sim = np.mean(sim_list)
-        f_out.write(f"{a1},{a2},{avg_sim:.4f}\n")
+print(f"Found {len(author_papers)} authors.")
 
-print("Done.")
+# === Compute pairwise author similarities ===
+print("Computing average author similarities...")
+rows = []
+
+authors = sorted(author_papers.keys())
+
+for a1, a2 in tqdm(itertools.combinations(authors, 2), total=(len(authors) * (len(authors)-1)) // 2):
+    idx1 = author_papers[a1]
+    idx2 = author_papers[a2]
+
+    emb1 = embeddings[idx1]
+    emb2 = embeddings[idx2]
+
+    sims = cosine_similarity(emb1, emb2)
+    avg_sim = sims.mean()
+
+    if avg_sim > 0.7:  # ⚠️ Optional: threshold to save space
+        rows.append((a1, a2, avg_sim))
+
+# === Save to CSV ===
+df_out = pd.DataFrame(rows, columns=["author1", "author2", "similarity"])
+df_out.to_csv(output_path, index=False)
+print(f"Author similarity layer saved to: {output_path}")
