@@ -4,7 +4,7 @@ import glob
 from tqdm import tqdm
 
 # === Paths (from your config) ===
-raw_workspace_path = "/N/slate/gpanayio/openalex-pre"
+raw_workspace_path = "/N/scratch/gpanayio/openalex-pre"
 out_workspace_path = "/N/slate/gpanayio/scisci-gatekeepers"
 out_scratch_path = "/N/scratch/gpanayio"
 
@@ -27,7 +27,7 @@ for file in tqdm(embedding_files, desc="Merging embeddings"):
     emb = np.load(file)
     all_embeddings.append(emb)
 
-print("🔗 Concatenating all embeddings...")
+print("Concatenating all embeddings...")
 merged = np.concatenate(all_embeddings, axis=0)
 os.makedirs(obj_path, exist_ok=True)
 np.save(merged_embeddings_path, merged)
