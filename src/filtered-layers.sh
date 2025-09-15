@@ -9,7 +9,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=24:00:00
-#SBATCH --mem=150G
+#SBATCH --mem=128G
 #SBATCH -A r00272
 
 #Load any modules that your program needs
