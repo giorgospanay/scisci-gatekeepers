@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import json
 import itertools
@@ -16,9 +17,7 @@ out_scratch_path = "/N/scratch/gpanayio"
 obj_path = f"{out_workspace_path}/obj"
 embedding_chunk_dir = f"{out_scratch_path}/embeddings_filtered"
 metadata_path = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
-similarity_output_dir = f"{obj_path}/author_similarity_chunks"
 
-# Inputs
 filtered_ids_file = os.path.join(obj_path, "filtered_paper_ids.txt")
 
 # Outputs
@@ -29,23 +28,24 @@ similarity_threshold = 0.7
 
 # --- Load filtered paper IDs ---
 with open(filtered_ids_file) as f:
-    paper_ids = set([line.strip() for line in f])
+    paper_ids = set(line.strip() for line in f)
 
 print(f"Loaded {len(paper_ids)} filtered paper IDs")
 
-# --- Step 1: Build author map (paper_id -> authors) ---
+# --- Step 1: Build paper → authors mapping ---
 print("Loading metadata to build paper→authors mapping...")
-meta = pd.read_csv(metadata_path, sep="\t", dtype=str)
-meta = meta[meta["id"].isin(paper_ids)]
-
+chunksize = 200_000
 paper_to_authors = {}
-for _, row in tqdm(meta.iterrows(), total=len(meta)):
-    try:
-        authors = ast.literal_eval(row["authorships:author:id"])
-        authors = [str(a) for a in authors]
-        paper_to_authors[str(row["id"])] = authors
-    except Exception:
-        continue
+
+for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize)):
+    chunk = chunk[chunk["id"].isin(paper_ids)]
+    for _, row in chunk.iterrows():
+        try:
+            authors = ast.literal_eval(row["authorships:author:id"])
+            authors = [str(a) for a in authors]
+            paper_to_authors[str(row["id"])] = authors
+        except Exception:
+            continue
 
 print(f"Built mapping for {len(paper_to_authors)} papers")
 
@@ -92,7 +92,6 @@ for i in tqdm(range(0, len(X), batch_size)):
                 continue
             pid_j = paper_ids_filtered[j]
             authors_j = paper_to_authors.get(pid_j, [])
-            # Project paper similarity to author-author
             for a1 in authors_i:
                 for a2 in authors_j:
                     if a1 == a2:

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import pandas as pd
 import os
 import json
@@ -12,21 +13,16 @@ out_scratch_path = "/N/scratch/gpanayio"
 obj_path = f"{out_workspace_path}/obj"
 embedding_chunk_dir = f"{out_scratch_path}/embeddings"
 metadata_path = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
-similarity_output_dir = f"{obj_path}/author_similarity_chunks"
 
-# Outputs
 filtered_ids_file = os.path.join(obj_path, "filtered_paper_ids.txt")
 filtered_embeddings_dir = os.path.join(out_scratch_path, "embeddings_filtered")
+
 os.makedirs(filtered_embeddings_dir, exist_ok=True)
 os.makedirs(obj_path, exist_ok=True)
 
 # Target concept codes (no "C" prefix)
 target_concepts = {"41008148", "33923547", "121332964", "86803240", "178243955"}
 min_concept_score = 0.3
-
-# --- Step 1: Load metadata and filter ---
-print("Loading metadata...")
-meta = pd.read_csv(metadata_path, sep="\t", dtype=str)
 
 def keep_paper(row):
     try:
@@ -39,19 +35,23 @@ def keep_paper(row):
         return False
     return False
 
-print("Filtering papers...")
-meta["keep"] = meta.apply(keep_paper, axis=1)
-filtered_meta = meta[meta["keep"]]
+# --- Step 1: Filter metadata in chunks ---
+print("Filtering metadata...")
+chunksize = 200_000
+with open(filtered_ids_file, "w") as fout:
+    for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize)):
+        chunk["keep"] = chunk.apply(keep_paper, axis=1)
+        keep_ids = chunk.loc[chunk["keep"], "id"].astype(str)
+        for pid in keep_ids:
+            fout.write(pid + "\n")
 
-paper_ids = set(filtered_meta["id"].astype(str))
-print(f"Kept {len(paper_ids)} / {len(meta)} papers")
+# Load IDs into memory for embedding filtering
+with open(filtered_ids_file) as f:
+    paper_ids = set(line.strip() for line in f)
 
-# Save paper IDs
-with open(filtered_ids_file, "w") as f:
-    for pid in paper_ids:
-        f.write(pid + "\n")
+print(f"Kept {len(paper_ids)} papers. IDs saved to {filtered_ids_file}")
 
-# --- Step 2: Filter embeddings ---
+# --- Step 2: Filter embedding chunks ---
 print("Filtering embeddings...")
 for fname in tqdm(os.listdir(embedding_chunk_dir)):
     if not fname.endswith(".json"):
@@ -69,4 +69,3 @@ for fname in tqdm(os.listdir(embedding_chunk_dir)):
             json.dump(filtered_chunk, f)
 
 print("Done. Filtered embeddings written to:", filtered_embeddings_dir)
-print("Filtered paper IDs written to:", filtered_ids_file)
