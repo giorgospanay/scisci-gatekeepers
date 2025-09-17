@@ -13,7 +13,7 @@
 
 
 module load python/gpu/3.10.10
-module load cudatoolkit/12.6
+module load cudatoolkit/12.2
 
 
 srun python src/test-faiss.py
