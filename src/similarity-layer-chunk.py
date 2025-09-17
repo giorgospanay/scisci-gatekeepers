@@ -1,4 +1,4 @@
-# compute_author_similarity_chunkwise.py
+# compute_author_similarity_chunkwise.py (optimized version)
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ out_scratch_path = "/N/scratch/gpanayio"
 obj_path = f"{out_workspace_path}/obj"
 embedding_chunk_dir = f"{out_scratch_path}/embeddings"
 metadata_path = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
-similarity_output_dir = f"{obj_path}/author_similarity_chunks"
+similarity_output_dir = f"{out_scratch_path}/author_similarity_chunks"
 
 os.makedirs(similarity_output_dir, exist_ok=True)
 
@@ -62,7 +62,7 @@ for i, j in tqdm(itertools.combinations_with_replacement(chunk_ids, 2), total=(l
     # Compute similarities
     sim_matrix = cosine_similarity(emb_i, emb_j)
 
-    pair_sims = defaultdict(list)
+    pair_sums = defaultdict(lambda: [0.0, 0])  # (sum, count)
 
     for x in range(len(ids_i)):
         for y in range(len(ids_j)):
@@ -74,12 +74,14 @@ for i, j in tqdm(itertools.combinations_with_replacement(chunk_ids, 2), total=(l
                     if a1 == a2:
                         continue
                     key = tuple(sorted((a1, a2)))
-                    pair_sims[key].append(sim)
+                    pair_sums[key][0] += sim
+                    pair_sums[key][1] += 1
 
-    # Write partial result
+    # Write averaged results
     with open(outfile, "w") as f_out:
-        for (a1, a2), sims in pair_sims.items():
-            json.dump({"a1": a1, "a2": a2, "avg_sim": float(np.mean(sims))}, f_out)
+        for (a1, a2), (s, c) in pair_sums.items():
+            avg_sim = s / c
+            json.dump({"a1": a1, "a2": a2, "avg_sim": round(avg_sim, 4)}, f_out)
             f_out.write("\n")
 
 print("Done with all chunk pair similarities.")
