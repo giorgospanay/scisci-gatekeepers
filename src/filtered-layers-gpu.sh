@@ -17,7 +17,7 @@
 #Load any modules that your program needs
 #module load python/gpu/3.11.5
 module load python/gpu/3.10.10
-module load codatoolkit/12.6
+module load cudatoolkit/12.6
 
 export PATH=$HOME/.local/bin:$PATH
 # Set cache to scratch directory with more space
