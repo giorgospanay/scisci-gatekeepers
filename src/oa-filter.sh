@@ -8,8 +8,8 @@
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=18:00:00
-#SBATCH --mem=128G
+#SBATCH --time=12:00:00
+#SBATCH --mem=64G
 #SBATCH -A r00272
 
 #Load any modules that your program needs
