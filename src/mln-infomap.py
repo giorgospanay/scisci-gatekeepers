@@ -8,11 +8,11 @@ Infomap overlapping community detection on:
 
 Outputs:
   - layerA_coms.csv, layerB_coms.csv
-  - matched_pairs.csv (A↔B community Jaccard matches)
+  - matched_pairs.csv
   - multilayer_coms.csv (per ω)
   - bridge_actors.csv (per ω)
-  - scores.csv (ONMI & Omega comparisons)
-  - author_diagnostics.csv (per-author memberships and flags)
+  - scores.csv (ONMI & Omega)
+  - author_diagnostics.csv (per ω)
 
 Requires:
   pip install infomap cdlib
@@ -33,16 +33,16 @@ def read_edgelist(path, weighted=True):
 				continue
 			parts = line.split()
 			if weighted and len(parts) >= 3:
-				u, v, w = int(parts[0]), int(parts[1]), float(parts[2])
+				u, v, w = parts[0], parts[1], float(parts[2])
 			else:
-				u, v, w = int(parts[0]), int(parts[1]), 1.0
+				u, v, w = parts[0], parts[1], 1.0
 			yield u, v, w
 
 def extract_overlap(im):
 	com2nodes = defaultdict(set)
 	for phys_id, module_path in im.get_multilevel_modules(states=True).items():
 		cid = module_path[-1]
-		com2nodes[cid].add(phys_id)
+		com2nodes[cid].add(str(phys_id))
 	return dict(com2nodes)
 
 def invert(coms):
@@ -114,10 +114,10 @@ def to_cdlib(coms, all_nodes):
 # -----------------
 # Infomap runners
 # -----------------
-def run_single_layer(path, weighted=True, undirected=True, num_trials=50, seed=42):
+def run_single_layer(path, weighted=True, num_trials=50, seed=42):
 	im = Infomap(silent=True, num_trials=num_trials, two_level=True, seed=seed)
 	for u,v,w in read_edgelist(path, weighted=weighted):
-		im.add_link(u,v,w)
+		im.add_link(u,v,w)   # u,v are strings, w is float
 	im.run()
 	return extract_overlap(im)
 
@@ -127,13 +127,13 @@ def run_multilayer(pathA, pathB, omega=0.1, num_trials=50, seed=42,
 				 directed=True, seed=seed)
 	actorsA, actorsB = set(), set()
 	for u,v,w in read_edgelist(pathA, weighted=weightedA):
-		im.add_multilayer_intra_link(0,u,v,w)
+		im.add_multilayer_intra_link(0,str(u),str(v),float(w))
 		actorsA.update((u,v))
 	for u,v,w in read_edgelist(pathB, weighted=weightedB):
-		im.add_multilayer_intra_link(1,u,v,w)
+		im.add_multilayer_intra_link(1,str(u),str(v),float(w))
 		actorsB.update((u,v))
 	for a in (actorsA & actorsB):
-		im.add_multilayer_inter_link(0,a,1,omega)
+		im.add_multilayer_inter_link(0,str(a),1,omega)
 	im.run()
 	return extract_overlap(im)
 
@@ -167,7 +167,6 @@ def main(layerA, layerB, outdir, omega_list,
 	B_cd = to_cdlib(comsB, all_nodes)
 	onmi_AB = evaluation.overlapping_normalized_mutual_information_MGH(A_cd,B_cd).score
 	omega_AB = evaluation.omega_index(A_cd,B_cd).score
-
 	scores = [("A_vs_B", onmi_AB, omega_AB)]
 
 	# Multilayer runs
