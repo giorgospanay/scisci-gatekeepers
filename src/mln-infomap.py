@@ -115,8 +115,7 @@ def to_cdlib(coms, all_nodes):
 # Infomap runners
 # -----------------
 def run_single_layer(path, weighted=True, undirected=True, num_trials=50, seed=42):
-	im = Infomap(silent=True, num_trials=num_trials, two_level=True,
-				 undirected=undirected, seed=seed)
+	im = Infomap(silent=True, num_trials=num_trials, two_level=True, seed=seed)
 	for u,v,w in read_edgelist(path, weighted=weighted):
 		im.add_link(u,v,w)
 	im.run()
