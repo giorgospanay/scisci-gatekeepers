@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH -J oa-filtering
+#SBATCH -J filter-papers
 #SBATCH -p general
-#SBATCH -o logs/oa-filtering_%j.txt
-#SBATCH -e logs/oa-filtering_%j.err
+#SBATCH -o logs/filter-papers_%j.txt
+#SBATCH -e logs/filter-papers_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --nodes=1
