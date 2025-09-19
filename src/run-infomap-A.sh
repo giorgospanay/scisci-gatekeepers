@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#SBATCH -J infomap
-#SBATCH -o logs/infomap-A_%j.txt
-#SBATCH -e logs/infomap-A_%j.err
+#SBATCH -J im-A
+#SBATCH -o logs/im-A_%j.txt
+#SBATCH -e logs/im-A_%j.err
 #SBATCH -p general
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
