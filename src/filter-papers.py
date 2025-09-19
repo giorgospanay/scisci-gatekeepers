@@ -1,6 +1,7 @@
-import pandas as pd
+#!/usr/bin/env python3
 import os
-import json
+import numpy as np
+import pandas as pd
 import ast
 from tqdm import tqdm
 
@@ -9,87 +10,113 @@ raw_workspace_path = "/N/scratch/gpanayio/openalex-pre"
 out_workspace_path = "/N/slate/gpanayio/scisci-gatekeepers"
 out_scratch_path = "/N/scratch/gpanayio"
 
-obj_path = f"{out_workspace_path}/obj"
-embedding_chunk_dir = f"{out_scratch_path}/embeddings"
 metadata_path = f"{raw_workspace_path}/works_core+basic+authorship+ids+funding+concepts+references+mesh.tsv"
+embedding_chunk_dir = f"{out_scratch_path}/embeddings"
 
-filtered_ids_file = os.path.join(obj_path, "filtered_paper_ids.txt")
-filtered_embeddings_dir = os.path.join(out_scratch_path, "embeddings_filtered")
+obj_path = f"{out_workspace_path}/obj"
+filtered_embeddings_root = f"{out_scratch_path}/embeddings_filtered"
 
-os.makedirs(filtered_embeddings_dir, exist_ok=True)
 os.makedirs(obj_path, exist_ok=True)
+os.makedirs(filtered_embeddings_root, exist_ok=True)
 
-# Target concept codes (no "C" prefix)
-target_concepts = {"41008148", "33923547", "121332964", "86803240", "178243955"}
-min_concept_score = 0.3
-
-# Valid work types (exclude grants, paratext, etc.)
-valid_types = {
-	"journal-article",
-	"conference-paper",
-	"book-chapter",
-	"book",
-	"dissertation",
-	"report",
-	"preprint"
+# === Disciplines and concept IDs ===
+disciplines = {
+    "CS": "41008148",
+    "Math": "33923547",
+    "Physics": "121332964",
+    "Biology": "86803240",
+    "NetworkScience": "11413529"
 }
 
-def keep_paper(row):
-	# Year restriction
-	try:
-		year = int(row["publication_year"])
-		if year < 2000 or year > 2024:
-			return False
-	except Exception:
-		return False
+concept_score_threshold = 0.3
+year_min, year_max = 2000, 2024
 
-	# Type restriction
-	if row["type"] not in valid_types:
-		return False
+valid_types = {
+    "journal-article",
+    "conference-paper",
+    "book-chapter",
+    "book",
+    "dissertation",
+    "report",
+    "preprint"
+}
 
-	# Concept restriction
-	try:
-		ids = ast.literal_eval(row["concepts:id"])
-		scores = ast.literal_eval(row["concepts:score"])
-		for cid, sc in zip(ids, scores):
-			if str(cid) in target_concepts and float(sc) >= min_concept_score:
-				return True
-	except Exception:
-		return False
+# --- Step 1: Collect filtered paper IDs for each discipline ---
+print("Filtering metadata by discipline...")
+discipline_ids = {disc: set() for disc in disciplines}
 
-	return False
-
-# --- Step 1: Filter metadata in chunks ---
-print("Filtering metadata...")
 chunksize = 200_000
-with open(filtered_ids_file, "w") as fout:
-	for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize)):
-		chunk["keep"] = chunk.apply(keep_paper, axis=1)
-		keep_ids = chunk.loc[chunk["keep"], "id"].astype(str)
-		for pid in keep_ids:
-			fout.write(pid + "\n")
+for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize)):
+    # Restrict to papers in year range and valid types
+    chunk = chunk[
+        (chunk["type"].isin(valid_types)) &
+        (chunk["publication_year"].astype(float).between(year_min, year_max, inclusive="both"))
+    ]
+    if chunk.empty:
+        continue
 
-# Load IDs into memory for embedding filtering
-with open(filtered_ids_file) as f:
-	paper_ids = set(line.strip() for line in f)
+    for _, row in chunk.iterrows():
+        try:
+            cids = ast.literal_eval(row["concepts:id"])
+            cscores = [float(x) for x in ast.literal_eval(row["concepts:score"])]
+            concepts = {cid: s for cid, s in zip(cids, cscores)}
+        except Exception:
+            continue
 
-print(f"Kept {len(paper_ids)} papers between 2000–2024. IDs saved to {filtered_ids_file}")
+        for disc, code in disciplines.items():
+            if code in concepts and concepts[code] >= concept_score_threshold:
+                discipline_ids[disc].add(str(row["id"]))
 
-# --- Step 2: Filter embedding chunks ---
-print("Filtering embeddings...")
-for fname in tqdm(os.listdir(embedding_chunk_dir)):
-	if not fname.endswith(".json"):
-		continue
-	in_file = os.path.join(embedding_chunk_dir, fname)
-	out_file = os.path.join(filtered_embeddings_dir, fname)
+# Save IDs per discipline
+for disc, ids in discipline_ids.items():
+    id_file = os.path.join(obj_path, f"filtered_paper_ids_{disc}.txt")
+    with open(id_file, "w") as f:
+        for pid in ids:
+            f.write(pid + "\n")
+    print(f"{disc}: kept {len(ids)} papers, IDs saved to {id_file}")
 
-	with open(in_file, "r") as f:
-		chunk = json.load(f)
+# --- Step 2: Filter embeddings per discipline ---
+print("Filtering embeddings per discipline...")
 
-	filtered_chunk = {pid: emb for pid, emb in chunk.items() if pid in paper_ids}
+for disc, ids in discipline_ids.items():
+    disc_dir = os.path.join(filtered_embeddings_root, disc)
+    os.makedirs(disc_dir, exist_ok=True)
 
-	if filtered_chunk:
-		with open(out_file, "w") as f:
-			json.dump(filtered_chunk, f)
+    files = sorted([f for f in os.listdir(embedding_chunk_dir) if f.startswith("ids_") and f.endswith(".txt")])
 
-print("Done. Filtered embeddings written to:", filtered_embeddings_dir)
+    total_kept = 0
+    for id_file in tqdm(files, desc=f"Filtering {disc}"):
+        chunk_num = id_file.split("_")[1].split(".")[0]
+        emb_file = f"embeddings_{chunk_num}.npy"
+
+        id_path = os.path.join(embedding_chunk_dir, id_file)
+        emb_path = os.path.join(embedding_chunk_dir, emb_file)
+        if not os.path.exists(emb_path):
+            continue
+
+        with open(id_path) as f:
+            chunk_ids = [line.strip() for line in f]
+        embeddings = np.load(emb_path)
+
+        if len(chunk_ids) != embeddings.shape[0]:
+            print(f"Warning: mismatch in {id_file}, skipping")
+            continue
+
+        mask = [pid in ids for pid in chunk_ids]
+        filtered_ids = [pid for pid, keep in zip(chunk_ids, mask) if keep]
+        filtered_embs = embeddings[mask]
+
+        if len(filtered_ids) == 0:
+            continue
+
+        out_id_file = os.path.join(disc_dir, f"ids_{chunk_num}.txt")
+        out_emb_file = os.path.join(disc_dir, f"embeddings_{chunk_num}.npy")
+
+        with open(out_id_file, "w") as f:
+            for pid in filtered_ids:
+                f.write(pid + "\n")
+        np.save(out_emb_file, filtered_embs)
+
+        total_kept += len(filtered_ids)
+
+    print(f"{disc}: kept {total_kept} embeddings, written to {disc_dir}")
