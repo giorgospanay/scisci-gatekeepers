@@ -28,7 +28,7 @@ disciplines = {
 }
 
 # === Filters ===
-concept_score_threshold = 0.3   # accept weak root signals too
+concept_score_threshold = 0.3
 year_min, year_max = 2000, 2024
 
 valid_types = {
