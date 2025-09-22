@@ -23,7 +23,7 @@ disciplines = ["CS", "Math", "Physics", "Biology"]
 
 # === FAISS parameters ===
 embedding_dim = 768
-nlist = 4096
+nlist_default = 4096
 nprobe = 32
 top_k = 100
 batch_size = 50000
@@ -55,10 +55,14 @@ def build_collaboration_layer(disc):
     edges = {}
     chunksize = 200000
     usecols = ["id", "authorships:author:id"]
-    for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize, usecols=usecols), desc=f"Metadata {disc}"):
+    for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize, usecols=usecols),
+                      desc=f"Metadata {disc}"):
         chunk = chunk[chunk["id"].isin(paper_ids)]
         for _, row in chunk.iterrows():
-            authors = ast.literal_eval(row["authorships:author:id"]) if row["authorships:author:id"] else []
+            try:
+                authors = ast.literal_eval(row["authorships:author:id"]) if row["authorships:author:id"] else []
+            except Exception:
+                authors = []
             for i in range(len(authors)):
                 for j in range(i+1, len(authors)):
                     a, b = sorted((authors[i], authors[j]))
@@ -89,6 +93,7 @@ def build_similarity_layer(disc):
         return
 
     # Training sample
+    print("Preparing training sample...")
     sample_X = []
     for id_file in files[:50]:
         chunk_num = id_file.split("_")[1].split(".")[0]
@@ -98,16 +103,30 @@ def build_similarity_layer(disc):
         sample_X.append(X[:20000] if len(X) > 20000 else X)
     sample_X = np.vstack(sample_X).astype("float32")
     faiss.normalize_L2(sample_X)
+    n_train = sample_X.shape[0]
 
-    quantizer = faiss.IndexFlatIP(embedding_dim)
-    index = faiss.IndexIVFFlat(quantizer, embedding_dim, nlist, faiss.METRIC_INNER_PRODUCT)
-    index.train(sample_X)
+    # Choose index type
+    if n_train < nlist_default:
+        if n_train < 100000:
+            print(f"{disc}: small dataset ({n_train} samples), using Flat index.")
+            index = faiss.IndexFlatIP(embedding_dim)
+        else:
+            new_nlist = max(1, int(np.sqrt(n_train)))
+            print(f"{disc}: reducing nlist from {nlist_default} to {new_nlist}")
+            quantizer = faiss.IndexFlatIP(embedding_dim)
+            index = faiss.IndexIVFFlat(quantizer, embedding_dim, new_nlist, faiss.METRIC_INNER_PRODUCT)
+            index.train(sample_X)
+    else:
+        quantizer = faiss.IndexFlatIP(embedding_dim)
+        index = faiss.IndexIVFFlat(quantizer, embedding_dim, nlist_default, faiss.METRIC_INNER_PRODUCT)
+        index.train(sample_X)
 
     if faiss.get_num_gpus() > 0:
         print("Using GPU FAISS")
         index = faiss.index_cpu_to_all_gpus(index)
 
     # Add embeddings
+    print("Adding embeddings to index...")
     all_ids = []
     for id_file in tqdm(files, desc=f"Adding {disc}"):
         chunk_num = id_file.split("_")[1].split(".")[0]
@@ -119,7 +138,10 @@ def build_similarity_layer(disc):
         index.add(X)
         all_ids.extend(ids)
 
+    print(f"Index built: {index.ntotal} vectors")
+
     # Query in batches
+    print(f"Writing edges to {out_file} ...")
     with open(out_file, "w") as fout:
         for start in tqdm(range(0, len(all_ids), batch_size), desc=f"Querying {disc}"):
             end = min(start + batch_size, len(all_ids))
