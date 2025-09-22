@@ -11,7 +11,7 @@
 #SBATCH --gres=gpu:1              
 #SBATCH --cpus-per-task=8
 #SBATCH --time=2-00:00:00
-#SBATCH --mem=64G
+#SBATCH --mem=180G
 #SBATCH -A r00272
 
 #Load any modules that your program needs
