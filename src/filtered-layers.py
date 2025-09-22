@@ -107,8 +107,8 @@ def build_similarity_layer(disc):
 
     # Choose index type
     if n_train < nlist_default:
-        if n_train < 100000:
-            print(f"{disc}: small dataset ({n_train} samples), using Flat index.")
+        if n_train < 1000000:
+            print(f"{disc}: small dataset ({n_train} samples), using Flat index on CPU.")
             index = faiss.IndexFlatIP(embedding_dim)
         else:
             new_nlist = max(1, int(np.sqrt(n_train)))
@@ -121,8 +121,9 @@ def build_similarity_layer(disc):
         index = faiss.IndexIVFFlat(quantizer, embedding_dim, nlist_default, faiss.METRIC_INNER_PRODUCT)
         index.train(sample_X)
 
-    if faiss.get_num_gpus() > 0:
-        print("Using GPU FAISS")
+    # Move to GPU only if IVF index
+    if faiss.get_num_gpus() > 0 and isinstance(index, faiss.IndexIVF):
+        print("Using GPU FAISS for IVF index")
         index = faiss.index_cpu_to_all_gpus(index)
 
     # Add embeddings
