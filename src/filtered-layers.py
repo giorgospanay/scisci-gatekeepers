@@ -26,14 +26,16 @@ os.makedirs(output_dir, exist_ok=True)
 # =========================
 disciplines = ["CS", "Math", "Physics", "Biology"]
 
-# FAISS
 embedding_dim = 768
-nlist_default = 4096       # IVF coarse centroids for large datasets
+nlist_default = 4096   # minimum clusters for IVF
 nprobe = 32
 top_k = 100
-batch_size = 50000         # how many queries per batch
 
-# Metadata read for collaboration layer
+# Training and adding
+target_train_cap = 500_000
+add_minibatch = 10_000
+
+# Metadata
 meta_chunksize = 200_000
 meta_usecols = ["id", "authorships:author:id"]
 
@@ -127,11 +129,11 @@ def build_similarity_layer(disc):
 		return
 
 	n_total = sum(n for (_, _, _, n) in chunks)
-	print(f"{disc}: total vectors = {n_total}")
+	print(f"{disc}: total vectors = {n_total:,}")
 
-	# Training sample
+	# ---- Training sample ----
 	print("Preparing training sample...")
-	target_train = min(1_000_000, n_total)
+	target_train = min(target_train_cap, n_total)
 	sample_accum = []
 	remaining = target_train
 	for (_, id_path, emb_path, n) in chunks:
@@ -144,63 +146,57 @@ def build_similarity_layer(disc):
 	sample_X = np.vstack(sample_accum).astype("float32")
 	faiss.normalize_L2(sample_X)
 	n_train = sample_X.shape[0]
-	print(f"{disc}: training sample size = {n_train}")
+	print(f"{disc}: training sample size = {n_train:,}")
 
-	# Choose index type based on n_total
+	# ---- Choose index type ----
 	if n_total < 1_000_000:
 		print(f"{disc}: small dataset (<1M). Using Flat (CPU).")
 		index = faiss.IndexFlatIP(embedding_dim)
 	else:
-		nlist = max(256, min(nlist_default, int(math.sqrt(n_total))))
+		# Ensure nlist >= 4096
+		nlist = max(4096, int(math.sqrt(n_total)))
 		if n_train < nlist:
-			nlist = max(64, min(nlist, n_train))
-		print(f"{disc}: using IVF-Flat with nlist={nlist}, nprobe={nprobe}")
+			nlist = max(4096, min(nlist, n_train))
+		m = 64      # subquantizers
+		nbits = 8   # 256 centroids per subquantizer
+		print(f"{disc}: using IVF-PQ (CPU) with nlist={nlist}, m={m}, nbits={nbits}, nprobe={nprobe}")
 		quantizer = faiss.IndexFlatIP(embedding_dim)
-		index = faiss.IndexIVFFlat(quantizer, embedding_dim, nlist, faiss.METRIC_INNER_PRODUCT)
+		index = faiss.IndexIVFPQ(quantizer, embedding_dim, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT)
 		index.train(sample_X)
 		index.nprobe = nprobe
-		if faiss.get_num_gpus() > 0:
-			print(f"{disc}: moving IVF index to GPU")
-			index = faiss.index_cpu_to_all_gpus(index)
 
-	# Add embeddings
-	print("Adding embeddings to index...")
+	# ---- Add embeddings ----
+	print("Adding embeddings to index (CPU only, mini-batches)...")
 	all_ids = []
 	for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Adding {disc}"):
 		ids, X = load_ids_embeddings(id_path, emb_path)
 		X = X.astype("float32")
 		faiss.normalize_L2(X)
-		index.add(X)
+		for s in range(0, len(X), add_minibatch):
+			e = min(s + add_minibatch, len(X))
+			index.add(X[s:e])
 		all_ids.extend(ids)
 
-	print(f"{disc}: index built with {index.ntotal} vectors")
+	print(f"{disc}: index built with {index.ntotal:,} vectors")
 
-	# Query in batches
+	# ---- Query ----
 	print(f"{disc}: writing edges to {out_file} ...")
 	with open(out_file, "w") as fout:
-		for start in tqdm(range(0, len(all_ids), batch_size), desc=f"Querying {disc}"):
-			end = min(start + batch_size, len(all_ids))
-			batch_ids = all_ids[start:end]
-
-			# Load embeddings for this batch
-			X_batch = []
-			for (chunk_num, id_path, emb_path, n) in chunks:
-				ids, X = load_ids_embeddings(id_path, emb_path)
-				idmap = {pid: i for i, pid in enumerate(ids)}
-				for pid in batch_ids:
-					if pid in idmap:
-						X_batch.append(X[idmap[pid]])
-			if not X_batch:
+		for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Querying {disc}"):
+			ids, X = load_ids_embeddings(id_path, emb_path)
+			if len(ids) == 0:
 				continue
-			X_batch = np.vstack(X_batch).astype("float32")
-			faiss.normalize_L2(X_batch)
-
-			D, I = index.search(X_batch, top_k)
-			for i, src in enumerate(batch_ids):
-				for tgt_idx, sim in zip(I[i], D[i]):
-					if tgt_idx < 0 or src == all_ids[tgt_idx]:
+			X = X.astype("float32")
+			faiss.normalize_L2(X)
+			D, I = index.search(X, top_k)
+			for i_src, src_id in enumerate(ids):
+				for tgt_idx, sim in zip(I[i_src], D[i_src]):
+					if tgt_idx < 0:
 						continue
-					fout.write(f"{src}\t{all_ids[tgt_idx]}\t{sim:.4f}\n")
+					tgt_id = all_ids[tgt_idx]
+					if tgt_id == src_id:
+						continue
+					fout.write(f"{src_id}\t{tgt_id}\t{sim:.4f}\n")
 
 	print(f"Finished {disc}: similarity layer written to {out_file}")
 
