@@ -119,9 +119,9 @@ def collab_normalize_log1p(w, p99):
     return min(1.0, math.log1p(w)/math.log1p(max(p99,1.0)))
 
 # ========= Runners =========
-def run_single_layer(path,idmap,weighted=True,num_trials=25,seed=42,
+def run_single_layer(path,idmap,weighted=True,num_trials=1,seed=42,
                      threshold=None,sim_sharpen=False):
-    im=Infomap(silent=True,num_trials=num_trials,two_level=True,seed=seed)
+    im=Infomap(silent=False,num_trials=num_trials,two_level=True,seed=seed)
     for u,v,w in read_edgelist(path,weighted=weighted,threshold=threshold):
         if sim_sharpen:
             w_t=sim_sharpen_temp(w,tau=0.02)
@@ -131,7 +131,7 @@ def run_single_layer(path,idmap,weighted=True,num_trials=25,seed=42,
         im.add_link(ui,vi,wi)
     im.run(); return extract_overlap(im,idmap)
 
-def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=25,seed=42,
+def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
                    threshold=None):
     # --- stats pass for collab ---
     statsA=pass_stats_over_weights(pathA,is_weighted=True)
@@ -142,7 +142,7 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=25,seed=42,
     sA=1.0
     sB=(statsA["sum"] if statsA["sum"]>0 else 1.0)/(statsB["sum"] if statsB["sum"]>0 else 1.0)
 
-    im=Infomap(silent=True,num_trials=num_trials,two_level=True,directed=True,seed=seed)
+    im=Infomap(silent=False,num_trials=num_trials,two_level=True,directed=False,seed=seed)
 
     actorsA=set(); actorsB=set()
 
