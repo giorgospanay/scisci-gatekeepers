@@ -129,7 +129,8 @@ def run_single_layer(path,idmap,weighted=True,num_trials=1,seed=42,
             w_t=w
         ui,vi,wi=idmap.remap_edge(u,v,w_t)
         im.add_link(ui,vi,wi)
-    im.run(); return extract_overlap(im,idmap)
+    im.run()
+    return extract_overlap(im,idmap)
 
 def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
                    threshold=None):
@@ -144,7 +145,8 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 
     im=Infomap(silent=False,num_trials=num_trials,two_level=True,directed=False,seed=seed)
 
-    actorsA=set(); actorsB=set()
+    actorsA=set()
+    actorsB=set()
 
     # similarity layer
     for u,v,w in read_edgelist(pathA,weighted=True,threshold=threshold):
@@ -162,10 +164,12 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 
     # interlayer coupling (fixed)
     for a in actorsA & actorsB:
-        ai=idmap.get(a); im.add_multilayer_inter_link(0,ai,1,ai,omega)
+        ai=idmap.get(a)
+        im.add_multilayer_inter_link(0,ai,1,ai,omega)
 
     print(f"Built multilayer: |A|={len(actorsA):,} |B|={len(actorsB):,} |A∩B|={len(actorsA & actorsB):,}", flush=True)
-    im.run(); print("Infomap finished.", flush=True)
+    im.run()
+    print("Infomap finished.", flush=True)
     return extract_overlap(im,idmap)
 
 # ========= Main =========
@@ -212,7 +216,9 @@ if __name__=="__main__":
             w.writerow(["A_vs_B",onmi,omega])
 
     elif mode=="multilayer":
-        pathA=sys.argv[4]; pathB=sys.argv[5]; omega_str=sys.argv[6]
+        pathA=sys.argv[4]
+        pathB=sys.argv[5]
+        omega_str=sys.argv[6]
         omegas=[float(x) for x in omega_str.split(",")]
         print(f"Running multilayer ({disc}), omegas={omegas}",flush=True)
         idmap=IdMapper.load(os.path.join(outdir,"id_mapping.csv"))
