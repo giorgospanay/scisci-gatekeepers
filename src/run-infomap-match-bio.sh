@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -J im-match-bio
-#SBATCH -o logs/im-match-bio_%j.txt
-#SBATCH -e logs/im-match-bio_%j.err
+#SBATCH -o logs/im-match-MLN-bio_%j.txt
+#SBATCH -e logs/im-match-MLN-bio_%j.err
 #SBATCH -p general
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
@@ -19,4 +19,4 @@ module load python/3.12.4
 BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="Biology"
 
-python -u src/mln-infomap.py match $DSCP $BASE
+python -u src/mln-infomap.py multilayer-match $DSCP $BASE

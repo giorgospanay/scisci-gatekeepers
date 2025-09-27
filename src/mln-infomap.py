@@ -7,10 +7,11 @@ Usage:
     python -u mln-infomap.py <mode> <discipline> <out_base> [layerA] [layerB] [omega-grid]
 
 Modes:
-    layerA     Run Infomap on Layer A (similarity)
-    layerB     Run Infomap on Layer B (collaboration)
-    match      Compare Layer A vs B
-    multilayer Run multilayer (needs both layers)
+    layerA           Run Infomap on Layer A (similarity)
+    layerB           Run Infomap on Layer B (collaboration)
+    match            Compare Layer A vs B
+    multilayer       Run multilayer (needs both layers)
+    multilayer-match Compare multilayer runs vs A and B
 
 Arguments:
     discipline   Short name (e.g., "physics", "biology")
@@ -24,7 +25,7 @@ Examples:
     python -u mln-infomap.py multilayer Physics /N/slate/.../obj filtered_author_similarity_layer_Physics.edgelist filtered_collaboration_layer_Physics.edgelist "0.05,0.1,0.2"
 """
 
-import os, sys, csv, math
+import os, sys, csv, math, random
 from collections import defaultdict
 from infomap import Infomap
 from cdlib import evaluation, NodeClustering
@@ -86,7 +87,6 @@ def to_cdlib(coms):
     return NodeClustering([list(nodes) for nodes in coms.values()],graph=None,overlap=True)
 
 def pass_stats_over_weights(path, is_weighted=True, sample_every=1, cap_samples=5_000_000):
-    import random
     n=0; s=0.0; wmax=0.0; sample=[]
     step=max(1,sample_every)
     for i,line in enumerate(open(path)):
@@ -160,11 +160,13 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
         im.add_multilayer_intra_link(1,ui,vi,wi)
         actorsB.update((u,v))
 
-    # interlayer coupling
+    # interlayer coupling (fixed)
     for a in actorsA & actorsB:
-        ai=idmap.get(a); im.add_multilayer_inter_link(0,ai,1,omega)
+        ai=idmap.get(a); im.add_multilayer_inter_link(0,ai,1,ai,omega)
 
-    im.run(); return extract_overlap(im,idmap)
+    print(f"Built multilayer: |A|={len(actorsA):,} |B|={len(actorsB):,} |A∩B|={len(actorsA & actorsB):,}", flush=True)
+    im.run(); print("Infomap finished.", flush=True)
+    return extract_overlap(im,idmap)
 
 # ========= Main =========
 if __name__=="__main__":
@@ -214,6 +216,16 @@ if __name__=="__main__":
         omegas=[float(x) for x in omega_str.split(",")]
         print(f"Running multilayer ({disc}), omegas={omegas}",flush=True)
         idmap=IdMapper.load(os.path.join(outdir,"id_mapping.csv"))
+        for w in omegas:
+            print(f"  ω={w}",flush=True)
+            subdir=os.path.join(outdir,f"multilayer_omega_{w:g}")
+            os.makedirs(subdir,exist_ok=True)
+            comsM=run_multilayer(pathA,pathB,idmap,omega=w)
+            save_coms_csv(os.path.join(subdir,"multilayer_coms.csv"),comsM)
+
+    elif mode=="multilayer-match":
+        print(f"Comparing multilayer runs to A and B ({disc})", flush=True)
+
         def load_coms(path):
             coms={}
             with open(path) as f:
@@ -222,25 +234,24 @@ if __name__=="__main__":
                     cid,nodes=line.strip().split(",",1)
                     coms[int(cid)]=set(nodes.split("|")) if nodes else set()
             return coms
+
         comsA=load_coms(os.path.join(outdir,"layerA_coms.csv"))
         comsB=load_coms(os.path.join(outdir,"layerB_coms.csv"))
+
         scores=[]
-        for w in omegas:
-            print(f"  ω={w}",flush=True)
-            subdir=os.path.join(outdir,f"multilayer_omega_{w:g}")
-            os.makedirs(subdir,exist_ok=True)
-            comsM=run_multilayer(pathA,pathB,idmap,omega=w)
-            save_coms_csv(os.path.join(subdir,"multilayer_coms.csv"),comsM)
+        for subdir in [d for d in os.listdir(outdir) if d.startswith("multilayer_omega_")]:
+            comsM=load_coms(os.path.join(outdir,subdir,"multilayer_coms.csv"))
             A_cd,B_cd,M_cd=to_cdlib(comsA),to_cdlib(comsB),to_cdlib(comsM)
             onmi_AM=evaluation.overlapping_normalized_mutual_information_MGH(A_cd,M_cd).score
             omega_AM=evaluation.omega_index(A_cd,M_cd).score
             onmi_BM=evaluation.overlapping_normalized_mutual_information_MGH(B_cd,M_cd).score
             omega_BM=evaluation.omega_index(B_cd,M_cd).score
-            scores.append((f"A_vs_M({w})",onmi_AM,omega_AM))
-            scores.append((f"B_vs_M({w})",onmi_BM,omega_BM))
-        with open(os.path.join(outdir,"scores.csv"),"a",newline="") as f:
-            w=csv.writer(f); 
-            for row in scores: w.writerow(row)
+            scores.append((subdir,onmi_AM,omega_AM,onmi_BM,omega_BM))
+
+        with open(os.path.join(outdir,"scores.csv"),"w",newline="") as f:
+            w=csv.writer(f)
+            w.writerow(["multilayer_run","ONMI_A_M","Omega_A_M","ONMI_B_M","Omega_B_M"])
+            w.writerows(scores)
 
     else:
         sys.exit(f"Unknown mode: {mode}")
