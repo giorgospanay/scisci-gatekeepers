@@ -196,7 +196,7 @@ if __name__=="__main__":
 		save_coms_csv(os.path.join(outdir,"layerB_coms.csv"),coms)
 		idmap.save(os.path.join(outdir,"id_mapping.csv"))
 
-		elif mode=="match":
+	elif mode=="match":
 		# ----- Parameters -----
 		MIN_SIZE = 50          # threshold for "large" communities
 		OVERLAP_THRESHOLD = 0.9
