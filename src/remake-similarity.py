@@ -146,5 +146,5 @@ print(f"Final unique author–author edges: {len(merged):,}")
 print(f"Writing to {out_path} ...")
 merged.to_csv(out_path, sep=" ", header=False, index=False)
 
-print("\n✅ Done. You can now remove the temporary directory if desired:")
+print("\nDone. You can now remove the temporary directory if desired:")
 print(f"  rm -r {tmp_dir}")

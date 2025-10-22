@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH -J remake-sim-phys
-#SBATCH -o logs/remake-sim-phys_%j.txt
-#SBATCH -e logs/remake-sim-phys_%j.err
+#SBATCH -J remake-sim-bio
+#SBATCH -o logs/remake-sim-bio_%j.txt
+#SBATCH -e logs/remake-sim-bio_%j.err
 #SBATCH -p general
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=64G
+#SBATCH --mem=256G
 #SBATCH --time=2-00:00:00
 #SBATCH -A r00272
 
