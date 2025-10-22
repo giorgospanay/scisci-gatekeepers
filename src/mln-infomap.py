@@ -32,25 +32,34 @@ from cdlib import evaluation, NodeClustering
 
 # ========= ID Mapper =========
 class IdMapper:
-	def __init__(self): self.forward={}; self.reverse=[]
+	def __init__(self): 
+		self.forward={}
+		self.reverse=[]
 	def get(self, orig):
 		if orig not in self.forward:
-			nid=len(self.reverse); self.forward[orig]=nid; self.reverse.append(orig)
+			nid=len(self.reverse)
+			self.forward[orig]=nid
+			self.reverse.append(orig)
 		return self.forward[orig]
-	def remap_edge(self,u,v,w): return self.get(u),self.get(v),w
+	def remap_edge(self,u,v,w): 
+		return self.get(u),self.get(v),w
 	def save(self,path):
 		with open(path,"w",newline="") as f:
-			w=csv.writer(f); w.writerow(["internal_id","original_id"])
-			for nid,orig in enumerate(self.reverse): w.writerow([nid,orig])
+			w=csv.writer(f)
+			w.writerow(["internal_id","original_id"])
+			for nid,orig in enumerate(self.reverse): 
+				w.writerow([nid,orig])
 	@classmethod
 	def load(cls,path):
 		mapper=cls()
 		with open(path) as f:
 			next(f)
 			for line in f:
-				nid,orig=line.strip().split(",",1); nid=int(nid)
+				nid,orig=line.strip().split(",",1)
+				nid=int(nid)
 				mapper.forward[orig]=nid
-				while len(mapper.reverse)<=nid: mapper.reverse.append(None)
+				while len(mapper.reverse)<=nid: 
+					mapper.reverse.append(None)
 				mapper.reverse[nid]=orig
 		return mapper
 
@@ -74,7 +83,9 @@ def read_edgelist(path, weighted=True, report_every=1_000_000, threshold=None):
 def extract_overlap(im,idmap):
 	com2nodes=defaultdict(set)
 	for pid,modpath in im.get_multilevel_modules(states=True).items():
-		cid=modpath[-1]; orig=idmap.reverse[int(pid)]; com2nodes[cid].add(orig)
+		cid=modpath[-1]
+		orig=idmap.reverse[int(pid)]
+		com2nodes[cid].add(orig)
 	return dict(com2nodes)
 
 def save_coms_csv(path,coms):
@@ -105,7 +116,8 @@ def pass_stats_over_weights(path, is_weighted=True, sample_every=1, cap_samples=
 	sample.sort()
 	def q(p):
 		if not sample: return 0.0
-		idx=int(p*(len(sample)-1)); return sample[idx]
+		idx=int(p*(len(sample)-1))
+		return sample[idx]
 	return {"n":n,"sum":s,"max":wmax,"p95":q(0.95),"p99":q(0.99)}
 
 # ========= Weight transforms =========
@@ -176,14 +188,16 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 if __name__=="__main__":
 	if len(sys.argv)<3: print(__doc__); sys.exit(1)
 
-	mode=sys.argv[1]; disc=sys.argv[2]; out_base=sys.argv[3]
+	mode=sys.argv[1]
+	disc=sys.argv[2]
+	out_base=sys.argv[3]
 	outdir=os.path.join(out_base,f"infomap_runs_{disc}")
 	os.makedirs(outdir,exist_ok=True)
 
 	if mode=="layerA":
 		pathA=sys.argv[4]; 
 		print(f"Running Layer A ({disc}) with sharpening (τ=0.02)",flush=True)
-		idmap=IdMapper(); 
+		idmap=IdMapper()
 		coms=run_single_layer(pathA,idmap,weighted=True,sim_sharpen=True)
 		save_coms_csv(os.path.join(outdir,"layerA_coms.csv"),coms)
 		idmap.save(os.path.join(outdir,"id_mapping.csv"))
@@ -198,8 +212,8 @@ if __name__=="__main__":
 
 	elif mode=="match":
 		# ----- Parameters -----
-		MIN_SIZE = 50          # threshold for "large" communities
-		OVERLAP_THRESHOLD = 0.9
+		MIN_SIZE = 50          		# threshold for "large" communities
+		OVERLAP_THRESHOLD = 0.9 	# threshold for high overlap
 
 		import statistics
 
@@ -231,9 +245,9 @@ if __name__=="__main__":
 		statsB = stats(comsB)
 
 		print(f"Layer A: {statsA[0]:,} communities "
-			  f"(avg size={statsA[1]:.2f}, sd={statsA[2]:.2f}, ≥{MIN_SIZE}: {statsA[3]})")
+			  f"(avg size={statsA[1]:.2f}, sd={statsA[2]:.2f}, >={MIN_SIZE}: {statsA[3]})")
 		print(f"Layer B: {statsB[0]:,} communities "
-			  f"(avg size={statsB[1]:.2f}, sd={statsB[2]:.2f}, ≥{MIN_SIZE}: {statsB[3]})",
+			  f"(avg size={statsB[1]:.2f}, sd={statsB[2]:.2f}, >={MIN_SIZE}: {statsB[3]})",
 			  flush=True)
 
 		with open(os.path.join(outdir, "layer_stats.csv"), "w", newline="") as f:
