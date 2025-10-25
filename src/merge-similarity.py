@@ -18,7 +18,7 @@ if len(sys.argv) < 2:
 
 disc = sys.argv[1]
 base = "/N/slate/gpanayio/scisci-gatekeepers/obj"
-base_scratch = "/N/scratch/gpanayio/scisci-gatekeepers/obj"
+base_scratch = "/N/scratch/gpanayio/"
 
 tmp_dir = os.path.join(base_scratch, f"tmp_author_edges_{disc}")
 out_path = os.path.join(base, f"filtered_author_similarity_layer_{disc}.edgelist")
