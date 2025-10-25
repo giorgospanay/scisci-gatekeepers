@@ -128,23 +128,32 @@ print(f"Finished streaming {edge_count:,} paper edges.")
 print(f"Skipped {missing:,} edges with missing paper–author info.")
 print("-" * 90)
 
-# ===== STEP 3: Merge all temporary chunks =====
-print("Merging temporary author edge chunks...")
 
-chunk_files = sorted(glob.glob(os.path.join(tmp_dir, "author_edges_chunk*.csv")))
-dfs = []
-for fp in chunk_files:
-    print(f"  Reading {os.path.basename(fp)}")
-    df = pd.read_csv(fp, sep=" ", names=["a", "b", "w"], dtype={"a": str, "b": str, "w": float})
-    dfs.append(df)
-print(f"Concatenating {len(dfs)} chunks...")
-merged = pd.concat(dfs, ignore_index=True)
-print("Grouping and summing weights...")
-merged = merged.groupby(["a", "b"], as_index=False)["w"].sum()
+print("Done")
 
-print(f"Final unique author–author edges: {len(merged):,}")
-print(f"Writing to {out_path} ...")
-merged.to_csv(out_path, sep=" ", header=False, index=False)
+# import gc
+# del paper_authors
+# gc.collect()
+# print("Freed metadata from memory before merging...")
 
-print("\nDone. You can now remove the temporary directory if desired:")
-print(f"  rm -r {tmp_dir}")
+
+# # ===== STEP 3: Merge all temporary chunks =====
+# print("Merging temporary author edge chunks...")
+
+# chunk_files = sorted(glob.glob(os.path.join(tmp_dir, "author_edges_chunk*.csv")))
+# dfs = []
+# for fp in chunk_files:
+#     print(f"  Reading {os.path.basename(fp)}")
+#     df = pd.read_csv(fp, sep=" ", names=["a", "b", "w"], dtype={"a": str, "b": str, "w": float})
+#     dfs.append(df)
+# print(f"Concatenating {len(dfs)} chunks...")
+# merged = pd.concat(dfs, ignore_index=True)
+# print("Grouping and summing weights...")
+# merged = merged.groupby(["a", "b"], as_index=False)["w"].sum()
+
+# print(f"Final unique author–author edges: {len(merged):,}")
+# print(f"Writing to {out_path} ...")
+# merged.to_csv(out_path, sep=" ", header=False, index=False)
+
+# print("\nDone. You can now remove the temporary directory if desired:")
+# print(f"  rm -r {tmp_dir}")
