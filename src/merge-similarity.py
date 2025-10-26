@@ -33,7 +33,7 @@ if not os.path.isdir(tmp_dir):
     sys.exit(f"Directory not found: {tmp_dir}")
 
 chunk_files = sorted(
-    os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("chunk_")
+    os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk_")
 )
 if not chunk_files:
     sys.exit("No chunk files found to merge.")
