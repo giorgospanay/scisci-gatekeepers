@@ -13,7 +13,7 @@ import os, sys, subprocess
 
 # ===== Input argument =====
 if len(sys.argv) < 2:
-    print("Usage: python merge_author_chunks_avg.py <discipline>")
+    print("Usage: python merge-similarity.py <discipline>")
     sys.exit(1)
 
 disc = sys.argv[1]
@@ -33,7 +33,7 @@ if not os.path.isdir(tmp_dir):
     sys.exit(f"Directory not found: {tmp_dir}")
 
 chunk_files = sorted(
-    os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk_")
+    os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk")
 )
 if not chunk_files:
     sys.exit("No chunk files found to merge.")
