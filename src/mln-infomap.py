@@ -70,6 +70,19 @@ def read_edgelist(path, weighted=True, report_every=1_000_000, threshold=None):
 		for line in f:
 			if not line.strip() or line.startswith("#"): continue
 			parts=line.split()
+
+			# # @TODO: fix accordingly
+			# u = parts[0].strip("[]")
+			# v = parts[1].strip("[]")
+			# try:
+			# 	w = float(parts[2])
+			# except ValueError:
+			# 	continue
+
+			# # Skip malformed edges (empty or invalid node IDs)
+			# if not u.isdigit() or not v.isdigit():
+			# 	continue
+
 			if weighted and len(parts)>=3:
 				u,v,w=parts[0],parts[1],float(parts[2])
 				if threshold is not None and w<threshold: continue
