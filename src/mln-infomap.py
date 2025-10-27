@@ -271,6 +271,7 @@ if __name__=="__main__":
 		# --- (b) Overlap search ---
 		results = []
 		for cidB, nodesB in comsB.items():
+			# Only check communities with a large enough size.
 			if len(nodesB) < MIN_SIZE:
 				continue
 			best_cidA, best_overlap = None, 0.0
@@ -290,7 +291,7 @@ if __name__=="__main__":
 			w = csv.writer(f)
 			w.writerow(["layerB_comm", "best_layerA_comm", "overlap_pct"])
 			for r in results:
-				w.writerow([r[0], r[1], f"{100*r[2]:.2f}"])
+				w.writerow([r[0], r[1], f"{r[2]:.4f}"])
 
 		print(f"Analyzed {len(results)} large Layer-B communities", flush=True)
 
