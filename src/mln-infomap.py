@@ -189,7 +189,7 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 	# interlayer coupling (fixed)
 	for a in actorsA & actorsB:
 		ai=idmap.get(a)
-		im.add_multilayer_inter_link(0,ai,1,ai,omega)
+		im.add_multilayer_inter_link(0,ai,1,weight=omega)
 
 	print(f"Built multilayer: |A|={len(actorsA):,} |B|={len(actorsB):,} |A∩B|={len(actorsA & actorsB):,}", flush=True)
 	im.run()
