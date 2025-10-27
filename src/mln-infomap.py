@@ -225,7 +225,7 @@ if __name__=="__main__":
 	elif mode=="match":
 		# ----- Parameters -----
 		MIN_SIZE = 50          		# threshold for "large" communities
-		OVERLAP_THRESHOLD = 0.9 	# threshold for high overlap
+		OVERLAP_THRESHOLD = 0.5 	# threshold for high overlap
 
 		import statistics
 
