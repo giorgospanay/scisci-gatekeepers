@@ -71,18 +71,6 @@ def read_edgelist(path, weighted=True, report_every=1_000_000, threshold=None):
 			if not line.strip() or line.startswith("#"): continue
 			parts=line.split()
 
-			# # @TODO: fix accordingly
-			# u = parts[0].strip("[]")
-			# v = parts[1].strip("[]")
-			# try:
-			# 	w = float(parts[2])
-			# except ValueError:
-			# 	continue
-
-			# # Skip malformed edges (empty or invalid node IDs)
-			# if not u.isdigit() or not v.isdigit():
-			# 	continue
-
 			if weighted and len(parts)>=3:
 				u,v,w=parts[0],parts[1],float(parts[2])
 				if threshold is not None and w<threshold: continue
@@ -135,6 +123,7 @@ def pass_stats_over_weights(path, is_weighted=True, sample_every=1, cap_samples=
 
 # ========= Weight transforms =========
 def sim_sharpen_temp(w, tau=0.02):
+	w = max(0.0, min(1.0, w))  # clamp within [0,1]
 	return math.exp(-(1.0-w)/max(tau,1e-6))
 
 def sim_sharpen_gamma(w, alpha=3.0):
@@ -149,7 +138,9 @@ def run_single_layer(path,idmap,weighted=True,num_trials=1,seed=42,
 	im=Infomap(silent=False,num_trials=num_trials,two_level=True,seed=seed)
 	for u,v,w in read_edgelist(path,weighted=weighted,threshold=threshold):
 		if sim_sharpen:
-			w_t=sim_sharpen_temp(w,tau=0.02)
+			# Add safeguard for duplicated edges
+			w = max(0.0, min(1.0, w))  
+			w_t = sim_sharpen_temp(w, tau=0.02)
 		else:
 			w_t=w
 		ui,vi,wi=idmap.remap_edge(u,v,w_t)
@@ -175,15 +166,23 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 
 	# similarity layer
 	for u,v,w in read_edgelist(pathA,weighted=True,threshold=threshold):
-		w_t=sim_sharpen_temp(w,tau=0.02)*sA
-		ui,vi,wi=idmap.remap_edge(u,v,w_t)
+		# Clamp w to [0,1] to prevent math overflow
+		if not isinstance(w, (int, float)):
+			continue
+		w = max(0.0, min(1.0, w))
+		w_t = sim_sharpen_temp(w, tau=0.02) * sA
+		ui,vi,wi = idmap.remap_edge(u,v,w_t)
 		im.add_multilayer_intra_link(0,ui,vi,wi)
 		actorsA.update((u,v))
 
 	# collaboration layer
 	for u,v,w in read_edgelist(pathB,weighted=True):
-		w_t=collab_normalize_log1p(w,p99_B)*sB
-		ui,vi,wi=idmap.remap_edge(u,v,w_t)
+		# Ensure w >= 0 to avoid log domain error
+		if not isinstance(w, (int, float)):
+			continue
+		w = max(0.0, w)
+		w_t = collab_normalize_log1p(w, p99_B) * sB
+		ui,vi,wi = idmap.remap_edge(u,v,w_t)
 		im.add_multilayer_intra_link(1,ui,vi,wi)
 		actorsB.update((u,v))
 
