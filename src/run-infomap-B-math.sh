@@ -9,7 +9,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=320G
+#SBATCH --mem=64G
 #SBATCH --time=2:00:00
 #SBATCH -A r00272
 
