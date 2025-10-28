@@ -82,12 +82,27 @@ def read_edgelist(path, weighted=True, report_every=1_000_000, threshold=None):
 	print(f"  Finished reading {count:,} edges from {os.path.basename(path)}",flush=True)
 
 def extract_overlap(im,idmap):
-	com2nodes=defaultdict(set)
-	for pid,modpath in im.get_multilevel_modules(states=True).items():
-		cid=modpath[-1]
-		orig=idmap.reverse[int(pid)]
+	# com2nodes=defaultdict(set)
+	# for pid,modpath in im.get_multilevel_modules(states=True).items():
+	# 	cid=modpath[-1]
+	# 	orig=idmap.reverse[int(pid)]
+	# 	com2nodes[cid].add(orig)
+	# return dict(com2nodes)
+	
+	com2nodes = defaultdict(set)
+	skipped = 0
+	for pid, modpath in im.get_multilevel_modules(states=True).items():
+		cid = modpath[-1]
+		pid_int = int(pid)
+		if pid_int >= len(idmap.reverse):
+			skipped += 1
+			continue
+		orig = idmap.reverse[pid_int]
 		com2nodes[cid].add(orig)
+	if skipped > 0:
+		print(f"⚠️  Skipped {skipped:,} unmapped state-node IDs (multilayer states).")
 	return dict(com2nodes)
+
 
 def save_coms_csv(path,coms):
 	with open(path,"w",newline="") as f:
