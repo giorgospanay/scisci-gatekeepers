@@ -21,7 +21,7 @@ base = "/N/slate/gpanayio/scisci-gatekeepers/obj"
 base_scratch = "/N/scratch/gpanayio/"
 
 tmp_dir = os.path.join(base_scratch, f"tmp_author_edges_{disc}")
-out_path = os.path.join(base, f"filtered_author_similarity_layer_{disc}.edgelist")
+out_path = os.path.join(base_scratch, f"filtered_author_similarity_layer_{disc}.edgelist")
 
 print(f"=== Merging author edge chunks for {disc} ===")
 print(f"Input directory: {tmp_dir}")
