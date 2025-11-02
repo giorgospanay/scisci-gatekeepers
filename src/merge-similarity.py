@@ -42,7 +42,7 @@ print(f"Found {len(chunk_files)} chunk files to merge.")
 
 # ===== External merge command (average aggregation) =====
 cat_cmd = "cat " + " ".join(chunk_files)
-sort_cmd = f"sort -S 100G -k1,1 -k2,2"
+sort_cmd = f"sort -S 100G -T {base_scratch} -k1,1 -k2,2"
 awk_cmd = (
     "awk 'BEGIN{OFS=\" \"} "
     "{key=$1\" \"$2; if(key==prev){sum+=$3; n++}"

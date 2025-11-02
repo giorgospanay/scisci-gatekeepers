@@ -100,7 +100,7 @@ def extract_overlap(im,idmap):
 		orig = idmap.reverse[pid_int]
 		com2nodes[cid].add(orig)
 	if skipped > 0:
-		print(f"⚠️  Skipped {skipped:,} unmapped state-node IDs (multilayer states).")
+		print(f"Skipped {skipped:,} unmapped state-node IDs (multilayer states).")
 	return dict(com2nodes)
 
 
