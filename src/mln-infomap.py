@@ -213,7 +213,32 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 
 # ========= Main =========
 if __name__=="__main__":
-	if len(sys.argv)<3: print(__doc__); sys.exit(1)
+
+	# added new cmd argument: ...discipline (threshold - optional)
+
+	if len(sys.argv) < 3:
+		print(__doc__)
+		sys.exit(1)
+
+	mode = sys.argv[1]
+	disc = sys.argv[2]
+	out_base = sys.argv[3]
+	outdir = os.path.join(out_base, f"infomap_runs_{disc}")
+	os.makedirs(outdir, exist_ok=True)
+
+	# Optional threshold argument (after all required ones)
+	# e.g. python mln-infomap.py multilayer CS /N/... sim.edgelist collab.edgelist "0.1" 0.01
+	threshold = None
+	try:
+		# Look for a numeric argument at the end
+		if len(sys.argv) > 4 and sys.argv[-1].replace('.', '', 1).isdigit():
+			threshold = float(sys.argv[-1])
+	except Exception:
+		threshold = None
+
+	if threshold is not None:
+		print(f"Applying weight threshold: {threshold}", flush=True)
+
 
 	mode=sys.argv[1]
 	disc=sys.argv[2]
@@ -223,9 +248,9 @@ if __name__=="__main__":
 
 	if mode=="layerA":
 		pathA=sys.argv[4]; 
-		print(f"Running Layer A ({disc}) with sharpening (τ=0.02)",flush=True)
+		print(f"Running Layer A ({disc}) with sharpening (tau=0.02)",flush=True)
 		idmap=IdMapper()
-		coms=run_single_layer(pathA,idmap,weighted=True,sim_sharpen=True)
+		coms=run_single_layer(pathA,idmap,weighted=True,sim_sharpen=True,threshold=threshold)
 		save_coms_csv(os.path.join(outdir,"layerA_coms.csv"),coms)
 		idmap.save(os.path.join(outdir,"id_mapping.csv"))
 
@@ -233,7 +258,7 @@ if __name__=="__main__":
 		pathB=sys.argv[4]
 		print(f"Running Layer B ({disc}) with log1p normalization",flush=True)
 		idmap=IdMapper.load(os.path.join(outdir,"id_mapping.csv"))
-		coms=run_single_layer(pathB,idmap,weighted=True,sim_sharpen=False)
+		coms=run_single_layer(pathB,idmap,weighted=True,sim_sharpen=False,threshold=threshold)
 		save_coms_csv(os.path.join(outdir,"layerB_coms.csv"),coms)
 		idmap.save(os.path.join(outdir,"id_mapping.csv"))
 
@@ -336,10 +361,10 @@ if __name__=="__main__":
 		print(f"Running multilayer ({disc}), omegas={omegas}",flush=True)
 		idmap=IdMapper.load(os.path.join(outdir,"id_mapping.csv"))
 		for w in omegas:
-			print(f"  ω={w}",flush=True)
+			print(f"  omega={w}",flush=True)
 			subdir=os.path.join(outdir,f"multilayer_omega_{w:g}")
 			os.makedirs(subdir,exist_ok=True)
-			comsM=run_multilayer(pathA,pathB,idmap,omega=w)
+			comsM=run_multilayer(pathA,pathB,idmap,omega=w,threshold=threshold)
 			save_coms_csv(os.path.join(subdir,"multilayer_coms.csv"),comsM)
 
 	elif mode=="multilayer-match":
