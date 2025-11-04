@@ -3,18 +3,18 @@
 Merge temporary author–author edge chunks into one averaged edgelist.
 
 Usage:
-    python merge_author_chunks_avg.py <discipline>
+	python merge_author_chunks_avg.py <discipline>
 
 Example:
-    python merge_author_chunks_avg.py Math
+	python merge_author_chunks_avg.py Math
 """
 
 import os, sys, subprocess
 
 # ===== Input argument =====
 if len(sys.argv) < 2:
-    print("Usage: python merge-similarity.py <discipline>")
-    sys.exit(1)
+	print("Usage: python merge-similarity.py <discipline>")
+	sys.exit(1)
 
 disc = sys.argv[1]
 base = "/N/slate/gpanayio/scisci-gatekeepers/obj"
@@ -30,13 +30,13 @@ print("-" * 80)
 
 # ===== Verify chunks =====
 if not os.path.isdir(tmp_dir):
-    sys.exit(f"Directory not found: {tmp_dir}")
+	sys.exit(f"Directory not found: {tmp_dir}")
 
 chunk_files = sorted(
-    os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk")
+	os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk")
 )
 if not chunk_files:
-    sys.exit("No chunk files found to merge.")
+	sys.exit("No chunk files found to merge.")
 
 print(f"Found {len(chunk_files)} chunk files to merge.")
 cpus = os.getenv("SLURM_CPUS_PER_TASK", "1")
@@ -46,11 +46,11 @@ nmem = 200 if disc=="Biology" else 100
 cat_cmd = "cat " + " ".join(chunk_files)
 sort_cmd = f"sort -S {nmem}G -T {base_scratch} --parallel={cpus} -k1,1 -k2,2"
 awk_cmd = (
-    "awk 'BEGIN{OFS=\" \"} "
-    "{key=$1\" \"$2; if(key==prev){sum+=$3; n++}"
-    "else{if(NR>1)print prev_a,prev_b,sum/n;"
-    "split(key,a,\" \"); prev_a=a[1]; prev_b=a[2]; sum=$3; n=1;} prev=key;} "
-    "END{if(NR>0)print prev_a,prev_b,sum/n;}'"
+	"awk 'BEGIN{OFS=\" \"} "
+	"{key=$1\" \"$2; if(key==prev){sum+=$3; n++}"
+	"else{if(NR>1)print prev_a,prev_b,sum/n;"
+	"split(key,a,\" \"); prev_a=a[1]; prev_b=a[2]; sum=$3; n=1;} prev=key;} "
+	"END{if(NR>0)print prev_a,prev_b,sum/n;}'"
 )
 
 cmd = f"{cat_cmd} | {sort_cmd} | {awk_cmd} > {out_path}"
@@ -59,10 +59,10 @@ print(f"Running merge command:\n  {cmd}\n")
 
 ret = subprocess.call(cmd, shell=True)
 if ret != 0:
-    sys.exit(f"Merge failed with exit code {ret}")
+	sys.exit(f"Merge failed with exit code {ret}")
 else:
-    print(f"Successfully merged {len(chunk_files)} chunks.")
-    print(f"Final averaged author–author layer written to:\n  {out_path}")
+	print(f"Successfully merged {len(chunk_files)} chunks.")
+	print(f"Final averaged author–author layer written to:\n  {out_path}")
 
 print("\nYou may delete the temporary chunks if desired:")
 print(f"  rm -r {tmp_dir}")
