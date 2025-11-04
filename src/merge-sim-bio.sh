@@ -9,12 +9,12 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=128G
-#SBATCH --time=18:00:00
+#SBATCH --mem=220G
+#SBATCH --time=1-12:00:00
 #SBATCH -A r00272
 
 
-module load python/3.12.4  
+module load python/3.12.4
 
 DSCP="Biology"
 
