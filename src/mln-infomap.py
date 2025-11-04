@@ -367,35 +367,83 @@ if __name__=="__main__":
 			comsM=run_multilayer(pathA,pathB,idmap,omega=w,threshold=threshold)
 			save_coms_csv(os.path.join(subdir,"multilayer_coms.csv"),comsM)
 
-	elif mode=="multilayer-match":
-		print(f"Comparing multilayer runs to A and B ({disc})", flush=True)
+	elif mode == "multilayer-match":
+		print(f"Analyzing within-community A–B overlap for multilayer runs ({disc})", flush=True)
 
-		def load_coms(path):
-			coms={}
-			with open(path) as f:
+		HIGH_THRESHOLD = 0.85
+		LOWER_THAN_PERFECT = 0.999999
+
+		for subdir in [d for d in os.listdir(outdir) if d.startswith("multilayer_omega_")]:
+			run_dir = os.path.join(outdir, subdir)
+			print(f"  Processing {subdir}", flush=True)
+
+			multi_path = os.path.join(run_dir, "multilayer_coms.csv")
+			if not os.path.exists(multi_path):
+				print(f"    Skipping {subdir}: multilayer_coms.csv not found.")
+				continue
+
+			# --- Load multilayer communities ---
+			coms = {}
+			with open(multi_path) as f:
 				next(f)
 				for line in f:
-					cid,nodes=line.strip().split(",",1)
-					coms[int(cid)]=set(nodes.split("|")) if nodes else set()
-			return coms
+					cid, nodes = line.strip().split(",", 1)
+					coms[int(cid)] = set(nodes.split("|")) if nodes else set()
 
-		comsA=load_coms(os.path.join(outdir,"layerA_coms.csv"))
-		comsB=load_coms(os.path.join(outdir,"layerB_coms.csv"))
+			results = []
+			detail_dir = os.path.join(run_dir, "intralayer_overlap_details")
+			os.makedirs(detail_dir, exist_ok=True)
 
-		scores=[]
-		for subdir in [d for d in os.listdir(outdir) if d.startswith("multilayer_omega_")]:
-			comsM=load_coms(os.path.join(outdir,subdir,"multilayer_coms.csv"))
-			A_cd,B_cd,M_cd=to_cdlib(comsA),to_cdlib(comsB),to_cdlib(comsM)
-			onmi_AM=evaluation.overlapping_normalized_mutual_information_MGH(A_cd,M_cd).score
-			omega_AM=evaluation.omega_index(A_cd,M_cd).score
-			onmi_BM=evaluation.overlapping_normalized_mutual_information_MGH(B_cd,M_cd).score
-			omega_BM=evaluation.omega_index(B_cd,M_cd).score
-			scores.append((subdir,onmi_AM,omega_AM,onmi_BM,omega_BM))
+			# --- Analyze each community ---
+			for cid, members in coms.items():
+				layerA = set()
+				layerB = set()
+				for m in members:
+					# detect which layer (0: or 1:) based on your naming convention
+					if ":" in m:
+						layer_id, nodeid = m.split(":", 1)
+						if layer_id == "0":
+							layerA.add(nodeid)
+						elif layer_id == "1":
+							layerB.add(nodeid)
+					else:
+						# fallback: skip malformed IDs
+						continue
 
-		with open(os.path.join(outdir,"scores.csv"),"w",newline="") as f:
-			w=csv.writer(f)
-			w.writerow(["multilayer_run","ONMI_A_M","Omega_A_M","ONMI_B_M","Omega_B_M"])
-			w.writerows(scores)
+				if not layerA and not layerB:
+					continue
+
+				union = layerA | layerB
+				inter = layerA & layerB
+				jacc = len(inter) / len(union) if union else 0.0
+
+				results.append((cid, len(layerA), len(layerB), len(inter), len(union), jacc))
+
+				if HIGH_THRESHOLD < jacc < LOWER_THAN_PERFECT:
+					uniqA = sorted(layerA - layerB)
+					uniqB = sorted(layerB - layerA)
+					with open(os.path.join(detail_dir, f"comm_{cid}.txt"), "w") as f:
+						f.write(f"Community {cid}\n")
+						f.write(f"Jaccard overlap = {jacc:.4f}\n")
+						f.write(f"Layer A nodes: {len(layerA)}\n")
+						f.write(f"Layer B nodes: {len(layerB)}\n")
+						f.write(f"Shared authors: {len(inter)}\n\n")
+						f.write(f"Unique to A ({len(uniqA)}):\n")
+						f.write("\n".join(uniqA))
+						f.write("\n\nUnique to B ({len(uniqB)}):\n")
+						f.write("\n".join(uniqB))
+
+			# --- Save summary CSV ---
+			out_csv = os.path.join(run_dir, "intralayer_overlap_summary.csv")
+			with open(out_csv, "w", newline="") as f:
+				w = csv.writer(f)
+				w.writerow(["community_id", "n_layerA", "n_layerB", "shared", "union", "jaccard"])
+				w.writerows(results)
+
+			print(f"  Saved {out_csv}", flush=True)
+
+		print("All multilayer within-community overlaps complete.", flush=True)
+
 
 	else:
 		sys.exit(f"Unknown mode: {mode}")
