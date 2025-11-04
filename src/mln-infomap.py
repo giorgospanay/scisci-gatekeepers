@@ -81,27 +81,43 @@ def read_edgelist(path, weighted=True, report_every=1_000_000, threshold=None):
 			if count%report_every==0: print(f"  ...read {count:,} edges from {os.path.basename(path)}",flush=True)
 	print(f"  Finished reading {count:,} edges from {os.path.basename(path)}",flush=True)
 
-def extract_overlap(im,idmap):
-	# com2nodes=defaultdict(set)
-	# for pid,modpath in im.get_multilevel_modules(states=True).items():
-	# 	cid=modpath[-1]
-	# 	orig=idmap.reverse[int(pid)]
-	# 	com2nodes[cid].add(orig)
-	# return dict(com2nodes)
-	
+def extract_overlap(im, idmap, multilayer=False):
+	from collections import defaultdict
 	com2nodes = defaultdict(set)
 	skipped = 0
-	for pid, modpath in im.get_multilevel_modules(states=True).items():
-		cid = modpath[-1]
-		pid_int = int(pid)
-		if pid_int >= len(idmap.reverse):
-			skipped += 1
-			continue
-		orig = idmap.reverse[pid_int]
-		com2nodes[cid].add(orig)
+
+	if multilayer:
+		# --- Extract with layer info preserved ---
+		try:
+			state_net = im.state_network
+			for state_id, modpath in im.get_multilevel_modules(states=True).items():
+				cid = modpath[-1]
+				# Extract layer and node IDs from Infomap's state network
+				state = state_net.node_id_to_state[state_id]
+				layer = state.layer_id
+				node_id = state.node_id
+				if node_id >= len(idmap.reverse):
+					skipped += 1
+					continue
+				orig = idmap.reverse[node_id]
+				com2nodes[cid].add(f"{layer}:{orig}")
+		except Exception as e:
+			print(f"[Warning] Could not extract multilayer states properly: {e}")
+	else:
+		# --- Original single-layer behavior ---
+		for pid, modpath in im.get_multilevel_modules(states=True).items():
+			cid = modpath[-1]
+			pid_int = int(pid)
+			if pid_int >= len(idmap.reverse):
+				skipped += 1
+				continue
+			orig = idmap.reverse[pid_int]
+			com2nodes[cid].add(orig)
+
 	if skipped > 0:
-		print(f"Skipped {skipped:,} unmapped state-node IDs (multilayer states).")
+		print(f"Skipped {skipped:,} unmapped state-node IDs.", flush=True)
 	return dict(com2nodes)
+
 
 
 def save_coms_csv(path,coms):
@@ -209,7 +225,7 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 	print(f"Built multilayer: |A|={len(actorsA):,} |B|={len(actorsB):,} |A∩B|={len(actorsA & actorsB):,}", flush=True)
 	im.run()
 	print("Infomap finished.", flush=True)
-	return extract_overlap(im,idmap)
+	return extract_overlap(im,idmap,multilayer=True)
 
 # ========= Main =========
 if __name__=="__main__":
