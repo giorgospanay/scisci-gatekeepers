@@ -8,7 +8,7 @@
 #SBATCH --mail-user=gpanayio@iu.edu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=500G
 #SBATCH --time=4-00:00:00
 #SBATCH -A r00272
@@ -18,7 +18,7 @@ module load python/3.12.4
 
 BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="CS"
-THRS="0.01"
+THRS="0.05"
 OMEGAS="0.05,0.2"
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
