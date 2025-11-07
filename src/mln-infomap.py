@@ -87,24 +87,36 @@ def extract_overlap(im, idmap, multilayer=False):
 	skipped = 0
 
 	if multilayer:
-		# --- Extract with layer info preserved ---
+		print("Extracting multilayer community membership (with layer IDs)...", flush=True)
+
 		try:
-			state_net = im.state_network
-			for state_id, modpath in im.get_multilevel_modules(states=True).items():
-				cid = modpath[-1]
-				# Extract layer and node IDs from Infomap's state network
-				state = state_net.node_id_to_state[state_id]
-				layer = state.layer_id
-				node_id = state.node_id
-				if node_id >= len(idmap.reverse):
-					skipped += 1
-					continue
-				orig = idmap.reverse[node_id]
-				com2nodes[cid].add(f"{layer}:{orig}")
+			# Works for most recent infomap-python versions (>=1.4)
+			state_net = getattr(im, "state_network", None)
+			if state_net is not None and hasattr(state_net, "get_state"):
+				for state_id, modpath in im.get_multilevel_modules(states=True).items():
+					cid = modpath[-1]
+					state = state_net.get_state(state_id)
+					layer = state.layer_id
+					node_id = state.node_id
+					if node_id >= len(idmap.reverse):
+						skipped += 1
+						continue
+					orig = idmap.reverse[node_id]
+					com2nodes[cid].add(f"{layer}:{orig}")
+
+			else:
+				# Fallback: older infomap-python versions without get_state
+				for node in im.iterLeafNodes():
+					cid = node.module_id
+					layer = getattr(node, "layer_id", 0)
+					orig_id = idmap.reverse[node.node_id] if node.node_id < len(idmap.reverse) else node.node_id
+					com2nodes[cid].add(f"{layer}:{orig_id}")
+
 		except Exception as e:
-			print(f"[Warning] Could not extract multilayer states properly: {e}")
+			print(f"[Warning] Multilayer extraction failed: {e}", flush=True)
+
 	else:
-		# --- Original single-layer behavior ---
+		# --- Original single-layer extraction ---
 		for pid, modpath in im.get_multilevel_modules(states=True).items():
 			cid = modpath[-1]
 			pid_int = int(pid)
@@ -116,7 +128,10 @@ def extract_overlap(im, idmap, multilayer=False):
 
 	if skipped > 0:
 		print(f"Skipped {skipped:,} unmapped state-node IDs.", flush=True)
+
+	print(f"Extracted {len(com2nodes)} communities.", flush=True)
 	return dict(com2nodes)
+
 
 
 
@@ -222,8 +237,18 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 		ai=idmap.get(a)
 		im.add_multilayer_inter_link(0,ai,1,weight=omega)
 
+
+	# --- Run Infomap ---
 	print(f"Built multilayer: |A|={len(actorsA):,} |B|={len(actorsB):,} |A∩B|={len(actorsA & actorsB):,}", flush=True)
 	im.run()
+	print("Infomap finished.", flush=True)
+
+	# --- Save the full state tree for safety ---
+	tree_path = os.path.join(os.getcwd(), f"multilayer_tree_omega_{omega:g}.txt")
+	im.write_tree(tree_path, states=True)
+	print(f"Saved state tree: {tree_path}", flush=True)
+
+
 	print("Infomap finished.", flush=True)
 	return extract_overlap(im,idmap,multilayer=True)
 
