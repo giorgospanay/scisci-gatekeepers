@@ -20,7 +20,7 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="Biology"
-THRS="0.05"
+THRS="0.15"
 OMEGAS="0.05,0.5,1.0"
 KEEP_FRAC="0.01"
 

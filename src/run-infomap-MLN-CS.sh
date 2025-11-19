@@ -19,7 +19,7 @@ module load python/3.12.4
 BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="CS"
 OMEGAS="0.05,0.5,1.0"
-THRS="0.05"
+THRS="0.15"
 KEEP_FRAC="0.01"
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK

@@ -18,7 +18,7 @@ module load python/3.12.4
 
 BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="Physics"
-THRS="0.05"
+THRS="0.15"
 OMEGAS="0.05,0.5,1.0"
 KEEP_FRAC="0.01"
 
