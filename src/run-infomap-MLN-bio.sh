@@ -22,9 +22,10 @@ BASE="/N/slate/gpanayio/scisci-gatekeepers/obj"
 DSCP="Biology"
 THRS="0.05"
 OMEGAS="0.05,0.5,1.0"
+KEEP_FRAC="0.01"
 
 # 4. Multilayer
 python -u src/mln-infomap.py multilayer $DSCP $BASE \
   $BASE/filtered_author_similarity_layer_$DSCP.edgelist \
   $BASE/filtered_collaboration_layer_$DSCP.edgelist \
-  $OMEGAS $THRS
+  $OMEGAS $THRS $KEEP_FRAC
