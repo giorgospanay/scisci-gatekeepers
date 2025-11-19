@@ -232,10 +232,23 @@ def run_multilayer(pathA,pathB,idmap,omega=0.1,num_trials=1,seed=42,
 		im.add_multilayer_intra_link(1,ui,vi,wi)
 		actorsB.update((u,v))
 
-	# interlayer coupling (fixed)
-	for a in actorsA & actorsB:
-		ai=idmap.get(a)
-		im.add_multilayer_inter_link(0,ai,1,weight=omega)
+	# interlayer coupling (only for keep_frac of nodes!)
+	# hopefully this is able to actually manage this large a network
+	# 	but there is a chance we might lose some accuracy.
+	shared = list(actorsA & actorsB)
+	
+	#### !!! set fraction of interlayer coupling edges to sample
+	keep_frac = 0.1
+
+	for a in random.sample(shared, int(len(shared) * keep_frac)):
+		ai = idmap.get(a)
+		im.add_multilayer_inter_link(0, ai, 1, weight=omega)
+
+
+	# # interlayer coupling (fixed)
+	# for a in actorsA & actorsB:
+	# 	ai=idmap.get(a)
+	# 	im.add_multilayer_inter_link(0,ai,1,weight=omega)
 
 
 	# --- Run Infomap ---
