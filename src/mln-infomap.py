@@ -195,111 +195,115 @@ def run_single_layer(path,idmap,weighted=True,num_trials=1,seed=42,
 	return extract_overlap(im,idmap)
 
 
-
-
 def run_multilayer(pathA, pathB, idmap, omega=0.1, num_trials=1, seed=42,
-                   threshold=None, inter_keep_frac=1.0, rescale_interlayer=False,
-                   tree_path=None):
-    # --- stats pass for collab ---
-    statsA = pass_stats_over_weights(pathA, is_weighted=True)
-    statsB = pass_stats_over_weights(pathB, is_weighted=True)
-    p99_B = statsB["p99"] if statsB["p99"] > 0 else 1.0
+				   threshold=None, inter_keep_frac=1.0, rescale_interlayer=False,
+				   tree_path=None):
+	# --- stats pass for collab ---
+	statsA = pass_stats_over_weights(pathA, is_weighted=True)
+	statsB = pass_stats_over_weights(pathB, is_weighted=True)
+	p99_B = statsB["p99"] if statsB["p99"] > 0 else 1.0
 
-    # approximate balancing by raw sums
-    sA = 1.0
-    sB = (statsA["sum"] if statsA["sum"] > 0 else 1.0) / (statsB["sum"] if statsB["sum"] > 0 else 1.0)
+	# approximate balancing by raw sums
+	sA = 1.0
+	sB = (statsA["sum"] if statsA["sum"] > 0 else 1.0) / (statsB["sum"] if statsB["sum"] > 0 else 1.0)
 
-    im = Infomap(silent=False, num_trials=num_trials, two_level=True, directed=False, seed=seed)
+	im = Infomap(silent=False, num_trials=num_trials, two_level=True, directed=False, seed=seed)
 
-    actorsA, actorsB = set(), set()
-    keptA = keptB = 0
+	actorsA, actorsB = set(), set()
+	keptA = keptB = 0
 
-    # similarity layer
-    if threshold is not None:
-        print(f"Filtering similarity edges below {threshold}", flush=True)
-    for u, v, w in read_edgelist(pathA, weighted=True, threshold=threshold):
-        if not isinstance(w, (int, float)):
-            continue
-        w = max(0.0, min(1.0, w))
-        w_t = sim_sharpen_temp(w, tau=0.02) * sA
-        ui, vi, wi = idmap.remap_edge(u, v, w_t)
-        im.add_multilayer_intra_link(0, ui, vi, wi)
-        actorsA.update((u, v)); keptA += 1
+	# similarity layer
+	if threshold is not None:
+		print(f"Filtering similarity edges below {threshold}", flush=True)
+	for u, v, w in read_edgelist(pathA, weighted=True, threshold=threshold):
+		if not isinstance(w, (int, float)):
+			continue
+		w = max(0.0, min(1.0, w))
+		w_t = sim_sharpen_temp(w, tau=0.02) * sA
+		ui, vi, wi = idmap.remap_edge(u, v, w_t)
+		im.add_multilayer_intra_link(0, ui, vi, wi)
+		actorsA.update((u, v)); keptA += 1
 
-    # collaboration layer
-    if threshold is not None:
-        print(f"Filtering collaboration edges below {threshold}", flush=True)
-    for u, v, w in read_edgelist(pathB, weighted=True, threshold=threshold):
-        if not isinstance(w, (int, float)):
-            continue
-        w = max(0.0, w)
-        w_t = collab_normalize_log1p(w, p99_B) * sB
-        ui, vi, wi = idmap.remap_edge(u, v, w_t)
-        im.add_multilayer_intra_link(1, ui, vi, wi)
-        actorsB.update((u, v)); keptB += 1
+	# collaboration layer
+	if threshold is not None:
+		print(f"Filtering collaboration edges below {threshold}", flush=True)
+	for u, v, w in read_edgelist(pathB, weighted=True, threshold=threshold):
+		if not isinstance(w, (int, float)):
+			continue
+		w = max(0.0, w)
+		w_t = collab_normalize_log1p(w, p99_B) * sB
+		ui, vi, wi = idmap.remap_edge(u, v, w_t)
+		im.add_multilayer_intra_link(1, ui, vi, wi)
+		actorsB.update((u, v)); keptB += 1
 
-    shared = actorsA & actorsB
-    print(f"Built intra-layers: |A edges|={keptA:,}, |B edges|={keptB:,}, "
-          f"|A nodes|={len(actorsA):,}, |B nodes|={len(actorsB):,}, "
-          f"|A∩B|={len(shared):,}", flush=True)
+	shared = actorsA & actorsB
+	print(f"Built intra-layers: |A edges|={keptA:,}, |B edges|={keptB:,}, "
+		  f"|A nodes|={len(actorsA):,}, |B nodes|={len(actorsB):,}, "
+		  f"|A∩B|={len(shared):,}", flush=True)
 
-    # --- sparse interlayer coupling
-    keep_frac = float(inter_keep_frac) if inter_keep_frac is not None else 1.0
-    keep_frac = max(0.0, min(1.0, keep_frac))
-    if keep_frac <= 0.0:
-        print("Interlayer coupling disabled (keep_frac=0).", flush=True)
-    else:
-        n_shared = len(shared)
-        n_keep = int(n_shared * keep_frac) if keep_frac < 1.0 else n_shared
-        if n_keep == 0 and n_shared > 0:
-            n_keep = 1  # ensure at least one interlink if there is overlap
+	# --- sparse interlayer coupling
+	keep_frac = float(inter_keep_frac) if inter_keep_frac is not None else 1.0
+	keep_frac = max(0.0, min(1.0, keep_frac))
+	if keep_frac <= 0.0:
+		print("Interlayer coupling disabled (keep_frac=0).", flush=True)
+	else:
+		n_shared = len(shared)
+		n_keep = int(n_shared * keep_frac) if keep_frac < 1.0 else n_shared
+		if n_keep == 0 and n_shared > 0:
+			n_keep = 1  # ensure at least one interlink if there is overlap
 
-        print(f"Creating interlayer links: sampling {n_keep:,} of {n_shared:,} "
-              f"shared nodes (keep_frac={keep_frac:.4f}, rescale={rescale_interlayer})", flush=True)
+		print(f"Creating interlayer links: sampling {n_keep:,} of {n_shared:,} "
+			  f"shared nodes (keep_frac={keep_frac:.4f}, rescale={rescale_interlayer})", flush=True)
 
-        if n_keep > 0:
-            if keep_frac < 1.0:
-                sample = random.sample(list(shared), n_keep)
-            else:
-                sample = shared
+		if n_keep > 0:
+			if keep_frac < 1.0:
+				sample = random.sample(list(shared), n_keep)
+			else:
+				sample = shared
 
-            # rescale ω so that expected total coupling is preserved if requested
-            ω = omega / keep_frac if (rescale_interlayer and keep_frac > 0) else omega
+			# rescale ω so that expected total coupling is preserved if requested
+			ω = omega / keep_frac if (rescale_interlayer and keep_frac > 0) else omega
 
-            added = 0
-            for a in sample:
-                ai = idmap.get(a)
-                im.add_multilayer_inter_link(0, ai, 1, weight=ω)
-                added += 1
-            print(f"Added {added:,} interlayer links with weight {ω}", flush=True)
+			added = 0
+			for a in sample:
+				ai = idmap.get(a)
+				im.add_multilayer_inter_link(0, ai, 1, weight=ω)
+				added += 1
+			print(f"Added {added:,} interlayer links with weight {ω}", flush=True)
 
-    print("Running Infomap...", flush=True)
-    im.run()
-    print("Infomap finished.", flush=True)
+	print("Running Infomap...", flush=True)
+	im.run()
+	print("Infomap finished.", flush=True)
 
-    # ---- write tree (with states) if requested ----
-    if tree_path is not None:
-        try:
-            # Most recent Infomap Python bindings:
-            im.write_tree(tree_path, states=True)
-            print(f"Wrote tree (with states) to {tree_path}", flush=True)
-        except AttributeError:
-            # Fallback for different API names
-            try:
-                im.writeFlowTree(tree_path)
-                print(f"Wrote flow tree to {tree_path} (no explicit states arg)", flush=True)
-            except Exception as e:
-                print(f"Warning: failed to write tree to {tree_path}: {e}", flush=True)
+	# ---- write tree (with states) if requested ----
+	if tree_path is not None:
+		try:
+			# Newer Infomap Python API
+			im.write_tree(tree_path, states=True)
+			print(f"Wrote tree (with states) to {tree_path}", flush=True)
+		except TypeError:
+			# Older API without 'states' argument
+			try:
+				im.write_tree(tree_path)
+				print(f"Wrote tree to {tree_path}", flush=True)
+			except Exception as e:
+				print(f"Warning: failed to write tree to {tree_path}: {e}", flush=True)
 
-    # ---- extract communities, then free memory ----
-    coms = extract_overlap(im, idmap)
+	# ---- extract communities, then free memory ----
+	coms = extract_overlap(im, idmap)
 
-    # help GC: drop big structures explicitly
-    del im, actorsA, actorsB, shared
-    gc.collect()
+	# help GC: drop big structures explicitly
+	try:
+		del im
+	except NameError:
+		pass
+	try:
+		del actorsA, actorsB, shared
+	except NameError:
+		pass
+	gc.collect()
 
-    return coms
-
+	return coms
 
 
 # ========= Main =========
@@ -471,13 +475,24 @@ if __name__ == "__main__":
 			print(f"  ω={w}", flush=True)
 			subdir = os.path.join(outdir, f"multilayer_omega_{w:g}")
 			os.makedirs(subdir, exist_ok=True)
+
+			tree_path = os.path.join(subdir, "multilayer_states.tree")
+
 			comsM = run_multilayer(
 				pathA, pathB, idmap,
 				omega=w,
 				threshold=threshold,
-				inter_keep_frac=keep_frac
+				inter_keep_frac=keep_frac,
+				tree_path=tree_path
 			)
+
 			save_coms_csv(os.path.join(subdir, "multilayer_coms.csv"), comsM)
+
+			# extra safety: free communities and force GC between ω-runs
+			del comsM
+			gc.collect()
+
+
 
 	# ---------- multilayer-match ----------
 	elif mode == "multilayer-match":
