@@ -11,7 +11,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=256G
 #SBATCH --time=1-00:00:00
-# #SBATCH -A r00272
+#SBATCH -A r00272
 
 module load python/3.12.4
 # If igraph isn't in that module, you may need something like:
