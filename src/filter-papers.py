@@ -25,6 +25,9 @@ disciplines = {
     "Math": "33923547",
     "Physics": "121332964",
     "Biology": "86803240",
+    "Sociology": "144024400",
+    "Economics": "162324750",
+    "Linguistics": "204787440",
 }
 
 # === Filters ===

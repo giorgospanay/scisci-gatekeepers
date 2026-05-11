@@ -17,7 +17,7 @@ model.eval()
 
 
 # Workspace path
-raw_workspace_path="/N/slate/gpanayio/openalex-pre"
+raw_workspace_path="/N/scratch/gpanayio/openalex-pre"
 out_workspace_path="/N/slate/gpanayio/scisci-gatekeepers"
 out_scratch_path="/N/scratch/gpanayio/"
 
