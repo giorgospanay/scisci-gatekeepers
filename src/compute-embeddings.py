@@ -26,11 +26,6 @@ raw_path=f"{raw_workspace_path}/data"
 obj_path=f"{out_workspace_path}/obj"
 temp_path=f"{out_scratch_path}"
 
-# Paths
-raw_workspace_path = "/N/slate/gpanayio/openalex-pre"
-out_workspace_path = "/N/slate/gpanayio/scisci-gatekeepers"
-out_scratch_path = "/N/scratch/gpanayio"
-
 abstracts_path = f"{raw_workspace_path}/works_core+abstract.tsv"
 output_dir = f"{out_scratch_path}/embeddings"
 chunksize = 750
