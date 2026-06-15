@@ -57,10 +57,13 @@ def try_parse_list(val):
 # --- Step 1: Filter metadata once; collect IDs per discipline ---
 print("Step 1/2: Scanning metadata and assigning papers to disciplines...")
 discipline_ids = {disc: set() for disc in disciplines}
+discipline_ids_before_author_filter = {disc: set() for disc in disciplines}
 n_rows_seen = 0
 
+max_authors = 30
+
 chunksize = 200_000
-usecols = ["id", "type", "publication_year", "concepts:id", "concepts:score"]
+usecols = ["id", "type", "publication_year", "concepts:id", "concepts:score", "authorships:author_id"]
 for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize, usecols=usecols)):
     # restrict to wanted types and year window first
     chunk = chunk[
@@ -82,19 +85,32 @@ for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chun
             cscores_raw = cscores_raw[:len(cids)]
         concepts = {str(cid): float(s) for cid, s in zip(cids, cscores_raw)}
 
+        # Check author count filter — track before/after for reporting
+        author_ids = try_parse_list(row["authorships:author_id"])
+        too_many_authors = len(author_ids) > max_authors
+
         for disc, root_code in disciplines.items():
             s = concepts.get(root_code)
             if s is not None and s >= concept_score_threshold:
-                discipline_ids[disc].add(str(row["id"]))
+                discipline_ids_before_author_filter[disc].add(str(row["id"]))
+                if not too_many_authors:
+                    discipline_ids[disc].add(str(row["id"]))
 
 # Save IDs per discipline + log counts
 print("\nMetadata pass complete.")
+print(f"{'Discipline':<12} {'Before':>10} {'After':>10} {'Lost':>8} {'% Lost':>8}")
+print("-" * 52)
 for disc, ids in discipline_ids.items():
+    before = len(discipline_ids_before_author_filter[disc])
+    after = len(ids)
+    lost = before - after
+    pct = 100 * lost / before if before > 0 else 0.0
+    print(f"  {disc:<10} {before:>10,d} {after:>10,d} {lost:>8,d} {pct:>7.2f}%")
     id_out = os.path.join(obj_path, f"filtered_paper_ids_{disc}.txt")
     with open(id_out, "w") as f:
         for pid in ids:
             f.write(pid + "\n")
-    print(f"  {disc:10s} | {len(ids):>10,d} papers  ->  {id_out}")
+    print(f"  {'':10}  -> {id_out}")
 
 # --- Step 2: Split embeddings once; write to per-discipline dirs ---
 print("\nStep 2/2: Splitting embedding chunks into per-discipline directories...")
