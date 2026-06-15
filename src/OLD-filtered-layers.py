@@ -24,7 +24,7 @@ os.makedirs(output_dir, exist_ok=True)
 # =========================
 # Configuration
 # =========================
-disciplines = ["CS", "Math", "Physics", "Biology", "Sociology", "Economics", "Linguistics"]
+disciplines = ["CS", "Math", "Physics", "Biology"]
 
 embedding_dim = 768
 nlist_default = 4096   # minimum clusters for IVF
@@ -109,32 +109,9 @@ def build_collaboration_layer(disc):
 	print(f"Finished {disc}: collaboration layer written to {out_file}")
 
 # =========================
-# Paper → authors lookup
-# (loaded once, shared across all disciplines)
-# =========================
-def load_paper_authors(metadata_path, chunksize=200_000):
-	print("Loading paper→author mapping from metadata...")
-	paper_authors = {}
-	usecols = ["id", "authorships:author:id"]
-	for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str,
-								  chunksize=chunksize, usecols=usecols),
-					  desc="Metadata (paper→authors)"):
-		chunk = chunk.dropna(subset=["authorships:author:id"])
-		for _, row in chunk.iterrows():
-			try:
-				authors = ast.literal_eval(row["authorships:author:id"])
-			except Exception:
-				authors = [a.strip() for a in row["authorships:author:id"].split(",") if a.strip()]
-			if authors:
-				paper_authors[row["id"]] = authors
-	print(f"Loaded author lists for {len(paper_authors):,} papers.")
-	return paper_authors
-
-# =========================
 # Similarity layer
-# (author–author, projected directly from FAISS results)
 # =========================
-def build_similarity_layer(disc, paper_authors):
+def build_similarity_layer(disc):
 	out_file = os.path.join(output_dir, f"filtered_author_similarity_layer_{disc}.edgelist")
 	if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
 		print(f"{disc}: similarity layer already exists at {out_file}, skipping.")
@@ -176,11 +153,12 @@ def build_similarity_layer(disc, paper_authors):
 		print(f"{disc}: small dataset (<1M). Using Flat (CPU).")
 		index = faiss.IndexFlatIP(embedding_dim)
 	else:
+		# Ensure nlist >= 4096
 		nlist = max(4096, int(math.sqrt(n_total)))
 		if n_train < nlist:
 			nlist = max(4096, min(nlist, n_train))
-		m = 64
-		nbits = 8
+		m = 64      # subquantizers
+		nbits = 8   # 256 centroids per subquantizer
 		print(f"{disc}: using IVF-PQ (CPU) with nlist={nlist}, m={m}, nbits={nbits}, nprobe={nprobe}")
 		quantizer = faiss.IndexFlatIP(embedding_dim)
 		index = faiss.IndexIVFPQ(quantizer, embedding_dim, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT)
@@ -188,66 +166,37 @@ def build_similarity_layer(disc, paper_authors):
 		index.nprobe = nprobe
 
 	# ---- Add embeddings ----
-	print("Adding embeddings to index...")
+	print("Adding embeddings to index (CPU only, mini-batches)...")
 	all_ids = []
 	for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Adding {disc}"):
 		ids, X = load_ids_embeddings(id_path, emb_path)
 		X = X.astype("float32")
 		faiss.normalize_L2(X)
 		for s in range(0, len(X), add_minibatch):
-			index.add(X[s:min(s + add_minibatch, len(X))])
+			e = min(s + add_minibatch, len(X))
+			index.add(X[s:e])
 		all_ids.extend(ids)
 
 	print(f"{disc}: index built with {index.ntotal:,} vectors")
 
-	# ---- Query and project directly to author–author edges ----
-	# For each paper pair (src, tgt) with sim >= threshold:
-	#   distribute sim / (|authors_src| * |authors_tgt|) to each author pair.
-	# Accumulate (sum, count) per author pair, then write averaged weight.
-	print(f"{disc}: querying and projecting to author–author edges...")
-	from collections import defaultdict
-	author_pair_sums = defaultdict(float)   # (a, b) -> sum of contributions
-	author_pair_counts = defaultdict(int)   # (a, b) -> number of contributions
-	similarity_threshold = 0.7
-
-	for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Querying {disc}"):
-		ids, X = load_ids_embeddings(id_path, emb_path)
-		if not ids:
-			continue
-		X = X.astype("float32")
-		faiss.normalize_L2(X)
-		D, I = index.search(X, top_k)
-
-		for i_src, src_id in enumerate(ids):
-			authors_src = paper_authors.get(src_id)
-			if not authors_src:
-				continue
-			for rank in range(top_k):
-				tgt_idx = I[i_src, rank]
-				sim = D[i_src, rank]
-				if tgt_idx < 0 or sim < similarity_threshold:
-					continue
-				tgt_id = all_ids[tgt_idx]
-				if tgt_id == src_id:
-					continue
-				authors_tgt = paper_authors.get(tgt_id)
-				if not authors_tgt:
-					continue
-				norm = len(authors_src) * len(authors_tgt)
-				contrib = sim / norm
-				for a in authors_src:
-					for b in authors_tgt:
-						if a == b:
-							continue
-						key = (a, b) if a <= b else (b, a)
-						author_pair_sums[key] += contrib
-						author_pair_counts[key] += 1
-
-	print(f"{disc}: writing {len(author_pair_sums):,} author–author edges...")
+	# ---- Query ----
+	print(f"{disc}: writing edges to {out_file} ...")
 	with open(out_file, "w") as fout:
-		for (a, b), total in author_pair_sums.items():
-			avg = total / author_pair_counts[(a, b)]
-			fout.write(f"{a}\t{b}\t{avg:.6f}\n")
+		for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Querying {disc}"):
+			ids, X = load_ids_embeddings(id_path, emb_path)
+			if len(ids) == 0:
+				continue
+			X = X.astype("float32")
+			faiss.normalize_L2(X)
+			D, I = index.search(X, top_k)
+			for i_src, src_id in enumerate(ids):
+				for tgt_idx, sim in zip(I[i_src], D[i_src]):
+					if tgt_idx < 0:
+						continue
+					tgt_id = all_ids[tgt_idx]
+					if tgt_id == src_id:
+						continue
+					fout.write(f"{src_id}\t{tgt_id}\t{sim:.4f}\n")
 
 	print(f"Finished {disc}: similarity layer written to {out_file}")
 
@@ -255,15 +204,12 @@ def build_similarity_layer(disc, paper_authors):
 # Main
 # =========================
 if __name__ == "__main__":
-	# Load paper→authors mapping once — shared across all disciplines
-	paper_authors = load_paper_authors(metadata_path)
-
 	for disc in disciplines:
 		print("\n" + "="*50)
 		print(f"Starting discipline: {disc}")
 		print("="*50)
 		build_collaboration_layer(disc)
-		build_similarity_layer(disc, paper_authors)
+		build_similarity_layer(disc)
 		print(f"Completed {disc}")
 		print("="*50)
 
