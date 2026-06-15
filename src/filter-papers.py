@@ -63,7 +63,7 @@ n_rows_seen = 0
 max_authors = 30
 
 chunksize = 200_000
-usecols = ["id", "type", "publication_year", "concepts:id", "concepts:score", "authorships:author_id"]
+usecols = ["id", "type", "publication_year", "concepts:id", "concepts:score", "authorships:author:id"]
 for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chunksize, usecols=usecols)):
     # restrict to wanted types and year window first
     chunk = chunk[
@@ -86,7 +86,7 @@ for chunk in tqdm(pd.read_csv(metadata_path, sep="\t", dtype=str, chunksize=chun
         concepts = {str(cid): float(s) for cid, s in zip(cids, cscores_raw)}
 
         # Check author count filter — track before/after for reporting
-        author_ids = try_parse_list(row["authorships:author_id"])
+        author_ids = try_parse_list(row["authorships:author:id"])
         too_many_authors = len(author_ids) > max_authors
 
         for disc, root_code in disciplines.items():
