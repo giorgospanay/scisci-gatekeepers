@@ -10,8 +10,8 @@ out_scratch_path = "/N/scratch/gpanayio"
 
 obj_path = f"{out_workspace_path}/obj"
 chunk_dir = f"{out_scratch_path}/embeddings"
-merged_embeddings_path = f"{obj_path}/merged_embeddings.npy"
-merged_ids_path = f"{obj_path}/merged_ids.txt"
+merged_embeddings_path = f"{out_scratch_path}/merged_embeddings.npy"
+merged_ids_path = f"{out_scratch_path}/merged_ids.txt"
 
 # === Locate chunk files ===
 embedding_files = sorted(glob.glob(os.path.join(chunk_dir, "embeddings_*.npy")))
@@ -21,16 +21,29 @@ assert len(embedding_files) == len(id_files), "Mismatch between .npy and .txt ch
 
 print(f"Found {len(embedding_files)} embedding chunks to merge...")
 
-# === Merge embeddings ===
-all_embeddings = []
-for file in tqdm(embedding_files, desc="Merging embeddings"):
-    emb = np.load(file)
-    all_embeddings.append(emb)
+# === Pre-compute total row count without loading data into RAM ===
+print("Counting total rows (mmap peek)...")
+total_rows = 0
+for file in tqdm(embedding_files, desc="Counting rows"):
+    emb = np.load(file, mmap_mode="r")
+    total_rows += emb.shape[0]
 
-print("Concatenating all embeddings...")
-merged = np.concatenate(all_embeddings, axis=0)
-os.makedirs(obj_path, exist_ok=True)
-np.save(merged_embeddings_path, merged)
+dim = np.load(embedding_files[0], mmap_mode="r").shape[1]
+print(f"Total rows: {total_rows:,}, dim: {dim}")
+
+# === Write merged embeddings incrementally via memmap ===
+# This never holds more than one chunk in RAM at a time.
+os.makedirs(out_scratch_path, exist_ok=True)
+merged = np.memmap(merged_embeddings_path, dtype="float32", mode="w+", shape=(total_rows, dim))
+
+offset = 0
+for file in tqdm(embedding_files, desc="Merging embeddings"):
+    chunk = np.load(file, mmap_mode="r")
+    n = chunk.shape[0]
+    merged[offset : offset + n] = chunk
+    offset += n
+
+del merged  # flushes to disk
 print(f"Merged embeddings saved to: {merged_embeddings_path}")
 
 # === Merge ID files ===
@@ -41,3 +54,4 @@ with open(merged_ids_path, "w") as fout:
                 fout.write(line)
 
 print(f"Merged IDs saved to: {merged_ids_path}")
+print("Done.")
