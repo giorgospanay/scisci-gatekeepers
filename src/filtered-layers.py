@@ -35,6 +35,10 @@ top_k = 100
 target_train_cap = 500_000
 add_minibatch = 10_000
 
+# Similarity accumulation — flush to disk periodically to bound memory
+similarity_threshold = 0.7
+flush_every_n_pairs = 20_000_000   # flush author_pair dict to disk once it grows this large
+
 # Metadata
 meta_chunksize = 200_000
 meta_usecols = ["id", "authorships:author:id"]
@@ -154,61 +158,97 @@ def build_similarity_layer(disc, paper_authors):
 	n_total = sum(n for (_, _, _, n) in chunks)
 	print(f"{disc}: total vectors = {n_total:,}")
 
-	# ---- Training sample ----
-	print("Preparing training sample...")
-	target_train = min(target_train_cap, n_total)
-	sample_accum = []
-	remaining = target_train
-	for (_, id_path, emb_path, n) in chunks:
-		if remaining <= 0:
-			break
-		ids, X = load_ids_embeddings(id_path, emb_path)
-		take = min(n, remaining)
-		sample_accum.append(X[:take])
-		remaining -= take
-	sample_X = np.vstack(sample_accum).astype("float32")
-	faiss.normalize_L2(sample_X)
-	n_train = sample_X.shape[0]
-	print(f"{disc}: training sample size = {n_train:,}")
+	# ---- Checkpoint paths for the built index ----
+	index_ckpt_path = os.path.join(out_scratch_path, f"faiss_index_{disc}.bin")
+	ids_ckpt_path = os.path.join(out_scratch_path, f"faiss_index_{disc}_ids.txt")
 
-	# ---- Choose index type ----
-	if n_total < 1_000_000:
-		print(f"{disc}: small dataset (<1M). Using Flat (CPU).")
-		index = faiss.IndexFlatIP(embedding_dim)
+	if os.path.exists(index_ckpt_path) and os.path.exists(ids_ckpt_path):
+		print(f"{disc}: found existing index checkpoint, loading instead of rebuilding...")
+		index = faiss.read_index(index_ckpt_path)
+		with open(ids_ckpt_path) as f:
+			all_ids = [ln.rstrip("\n") for ln in f]
+		print(f"{disc}: loaded index with {index.ntotal:,} vectors, {len(all_ids):,} ids")
 	else:
-		nlist = max(4096, int(math.sqrt(n_total)))
-		if n_train < nlist:
-			nlist = max(4096, min(nlist, n_train))
-		m = 64
-		nbits = 8
-		print(f"{disc}: using IVF-PQ (CPU) with nlist={nlist}, m={m}, nbits={nbits}, nprobe={nprobe}")
-		quantizer = faiss.IndexFlatIP(embedding_dim)
-		index = faiss.IndexIVFPQ(quantizer, embedding_dim, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT)
-		index.train(sample_X)
-		index.nprobe = nprobe
+		# ---- Training sample ----
+		print("Preparing training sample...")
+		target_train = min(target_train_cap, n_total)
+		sample_accum = []
+		remaining = target_train
+		for (_, id_path, emb_path, n) in chunks:
+			if remaining <= 0:
+				break
+			ids, X = load_ids_embeddings(id_path, emb_path)
+			take = min(n, remaining)
+			sample_accum.append(X[:take])
+			remaining -= take
+		sample_X = np.vstack(sample_accum).astype("float32")
+		faiss.normalize_L2(sample_X)
+		n_train = sample_X.shape[0]
+		print(f"{disc}: training sample size = {n_train:,}")
 
-	# ---- Add embeddings ----
-	print("Adding embeddings to index...")
-	all_ids = []
-	for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Adding {disc}"):
-		ids, X = load_ids_embeddings(id_path, emb_path)
-		X = X.astype("float32")
-		faiss.normalize_L2(X)
-		for s in range(0, len(X), add_minibatch):
-			index.add(X[s:min(s + add_minibatch, len(X))])
-		all_ids.extend(ids)
+		# ---- Choose index type ----
+		if n_total < 1_000_000:
+			print(f"{disc}: small dataset (<1M). Using Flat (CPU).")
+			index = faiss.IndexFlatIP(embedding_dim)
+		else:
+			nlist = max(4096, int(math.sqrt(n_total)))
+			if n_train < nlist:
+				nlist = max(4096, min(nlist, n_train))
+			m = 64
+			nbits = 8
+			print(f"{disc}: using IVF-PQ (CPU) with nlist={nlist}, m={m}, nbits={nbits}, nprobe={nprobe}")
+			quantizer = faiss.IndexFlatIP(embedding_dim)
+			index = faiss.IndexIVFPQ(quantizer, embedding_dim, nlist, m, nbits, faiss.METRIC_INNER_PRODUCT)
+			index.train(sample_X)
+			index.nprobe = nprobe
 
-	print(f"{disc}: index built with {index.ntotal:,} vectors")
+		# ---- Add embeddings ----
+		print("Adding embeddings to index...")
+		all_ids = []
+		for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Adding {disc}"):
+			ids, X = load_ids_embeddings(id_path, emb_path)
+			X = X.astype("float32")
+			faiss.normalize_L2(X)
+			for s in range(0, len(X), add_minibatch):
+				index.add(X[s:min(s + add_minibatch, len(X))])
+			all_ids.extend(ids)
+
+		print(f"{disc}: index built with {index.ntotal:,} vectors")
+
+		# ---- Save checkpoint so a crash during querying doesn't force a rebuild ----
+		print(f"{disc}: saving index checkpoint to {index_ckpt_path}")
+		faiss.write_index(index, index_ckpt_path)
+		with open(ids_ckpt_path, "w") as f:
+			for pid in all_ids:
+				f.write(pid + "\n")
 
 	# ---- Query and project directly to author–author edges ----
 	# For each paper pair (src, tgt) with sim >= threshold:
 	#   distribute sim / (|authors_src| * |authors_tgt|) to each author pair.
-	# Accumulate (sum, count) per author pair, then write averaged weight.
+	# To bound memory, the in-memory dict is periodically flushed to a
+	# temporary chunk file on scratch, then all chunks are merged at the end
+	# via external sort + awk (same averaging logic as the old merge step,
+	# just run automatically here).
 	print(f"{disc}: querying and projecting to author–author edges...")
 	from collections import defaultdict
-	author_pair_sums = defaultdict(float)   # (a, b) -> sum of contributions
-	author_pair_counts = defaultdict(int)   # (a, b) -> number of contributions
-	similarity_threshold = 0.7
+	import subprocess
+
+	tmp_dir = os.path.join(out_scratch_path, f"tmp_author_edges_{disc}")
+	os.makedirs(tmp_dir, exist_ok=True)
+
+	def flush_to_disk(pair_sums, pair_counts):
+		if not pair_sums:
+			return
+		tmp_path = os.path.join(tmp_dir, f"author_edges_chunk{flush_to_disk.counter:04d}.csv")
+		with open(tmp_path, "w") as fout:
+			for (a, b), total in pair_sums.items():
+				fout.write(f"{a} {b} {total} {pair_counts[(a, b)]}\n")
+		flush_to_disk.counter += 1
+		print(f"  flushed {len(pair_sums):,} pairs -> {tmp_path}", flush=True)
+	flush_to_disk.counter = 0
+
+	author_pair_sums = defaultdict(float)
+	author_pair_counts = defaultdict(int)
 
 	for (chunk_num, id_path, emb_path, n) in tqdm(chunks, desc=f"Querying {disc}"):
 		ids, X = load_ids_embeddings(id_path, emb_path)
@@ -243,11 +283,50 @@ def build_similarity_layer(disc, paper_authors):
 						author_pair_sums[key] += contrib
 						author_pair_counts[key] += 1
 
-	print(f"{disc}: writing {len(author_pair_sums):,} author–author edges...")
-	with open(out_file, "w") as fout:
-		for (a, b), total in author_pair_sums.items():
-			avg = total / author_pair_counts[(a, b)]
-			fout.write(f"{a}\t{b}\t{avg:.6f}\n")
+		# Flush periodically to bound memory
+		if len(author_pair_sums) >= flush_every_n_pairs:
+			flush_to_disk(author_pair_sums, author_pair_counts)
+			author_pair_sums.clear()
+			author_pair_counts.clear()
+
+	# Final flush of whatever remains
+	flush_to_disk(author_pair_sums, author_pair_counts)
+	author_pair_sums.clear()
+	author_pair_counts.clear()
+
+	# ---- Merge all chunk files on disk, averaging duplicate pairs ----
+	chunk_files = sorted(
+		os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith("author_edges_chunk")
+	)
+	print(f"{disc}: merging {len(chunk_files)} chunk files into {out_file} ...")
+
+	cpus = os.getenv("SLURM_CPUS_PER_TASK", "1")
+	nmem = 100
+	cat_cmd = "cat " + " ".join(chunk_files)
+	sort_cmd = f"sort -S {nmem}G -T {out_scratch_path} --parallel={cpus} -k1,1 -k2,2"
+	# Each line is: a b sum count -- combine duplicate (a,b) by summing sum and count, then divide
+	awk_cmd = (
+		"awk 'BEGIN{OFS=\"\\t\"} "
+		"{key=$1\" \"$2; if(key==prev){sum+=$3; cnt+=$4}"
+		"else{if(NR>1)print prev_a,prev_b,sum/cnt;"
+		"split(key,arr,\" \"); prev_a=arr[1]; prev_b=arr[2]; sum=$3; cnt=$4;} prev=key;} "
+		"END{if(NR>0)print prev_a,prev_b,sum/cnt;}'"
+	)
+	cmd = f"{cat_cmd} | {sort_cmd} | {awk_cmd} > {out_file}"
+	ret = subprocess.call(cmd, shell=True)
+	if ret != 0:
+		raise RuntimeError(f"{disc}: merge command failed with exit code {ret}")
+
+	print(f"{disc}: cleaning up temporary chunk files in {tmp_dir}")
+	for f in chunk_files:
+		os.remove(f)
+	os.rmdir(tmp_dir)
+
+	print(f"{disc}: cleaning up index checkpoint")
+	if os.path.exists(index_ckpt_path):
+		os.remove(index_ckpt_path)
+	if os.path.exists(ids_ckpt_path):
+		os.remove(ids_ckpt_path)
 
 	print(f"Finished {disc}: similarity layer written to {out_file}")
 
