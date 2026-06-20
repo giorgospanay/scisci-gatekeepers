@@ -49,9 +49,16 @@ meta_usecols = ["id", "authorships:author:id"]
 def load_ids_embeddings(id_file, emb_file):
 	with open(id_file) as f:
 		ids = [ln.strip() for ln in f]
-	X = np.load(emb_file, mmap_mode="r")
-	if X.shape[0] != len(ids):
-		raise ValueError(f"Mismatch: {id_file} has {len(ids)} IDs but {emb_file} has {X.shape[0]} rows")
+	# Open as mmap just to read the array, then copy into a normal in-RAM
+	# array and let the mmap (and its file descriptor) be garbage collected
+	# immediately. Without this, repeated mmap_mode="r" loads across many
+	# chunks (thousands of files) exhaust the process's open file descriptor
+	# limit (OSError: Too many open files).
+	X_mmap = np.load(emb_file, mmap_mode="r")
+	if X_mmap.shape[0] != len(ids):
+		raise ValueError(f"Mismatch: {id_file} has {len(ids)} IDs but {emb_file} has {X_mmap.shape[0]} rows")
+	X = np.array(X_mmap)  # forces a real copy, releasing the mmap
+	del X_mmap
 	return ids, X
 
 def list_discipline_chunks(disc_dir):
@@ -163,12 +170,19 @@ def build_similarity_layer(disc, paper_authors):
 	ids_ckpt_path = os.path.join(out_scratch_path, f"faiss_index_{disc}_ids.txt")
 
 	if os.path.exists(index_ckpt_path) and os.path.exists(ids_ckpt_path):
-		print(f"{disc}: found existing index checkpoint, loading instead of rebuilding...")
-		index = faiss.read_index(index_ckpt_path)
+		print(f"{disc}: found existing index checkpoint, checking freshness...")
 		with open(ids_ckpt_path) as f:
 			all_ids = [ln.rstrip("\n") for ln in f]
-		print(f"{disc}: loaded index with {index.ntotal:,} vectors, {len(all_ids):,} ids")
-	else:
+		if len(all_ids) != n_total:
+			print(f"{disc}: checkpoint has {len(all_ids):,} ids but current chunks total {n_total:,} — stale, rebuilding.")
+			os.remove(index_ckpt_path)
+			os.remove(ids_ckpt_path)
+			all_ids = None
+		else:
+			index = faiss.read_index(index_ckpt_path)
+			print(f"{disc}: loaded index with {index.ntotal:,} vectors, {len(all_ids):,} ids")
+
+	if not (os.path.exists(index_ckpt_path) and os.path.exists(ids_ckpt_path)):
 		# ---- Training sample ----
 		print("Preparing training sample...")
 		target_train = min(target_train_cap, n_total)
